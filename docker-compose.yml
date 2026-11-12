@@ -1,3 +1,6 @@
+# Pinned so data volumes keep the same names wherever this folder lives.
+name: rebuild
+
 # One command to run everything:  docker compose up --build
 # Then open http://localhost:8080
 services:

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useSocket } from '../hooks/useSocket';
+import { useSocket } from '../contexts/SocketContext';
 import { errorMessage, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
 import { useApp } from '../contexts/AppContext';
@@ -8,7 +8,7 @@ import { LogOut } from 'lucide-react';
 import { PageLoader } from '../components/common/LoadingSpinner';
 import QuizLobby from '../components/room/QuizLobby';
 import LiveQuiz from '../components/room/LiveQuiz';
-import QuizResults from '../components/room/QuizResults';
+import RoomResults from '../components/room/RoomResults';
 
 const RoomPage = () => {
   const { id: roomId } = useParams();
@@ -203,7 +203,7 @@ const RoomPage = () => {
       )}
 
       {quizState === 'completed' && (
-        <QuizResults room={room} participants={participants} totalQuestions={review.length || room.num_questions} isHost={isHost} review={review} />
+        <RoomResults room={room} participants={participants} totalQuestions={review.length || room.num_questions} isHost={isHost} review={review} />
       )}
 
       {quizState === 'closed' && (

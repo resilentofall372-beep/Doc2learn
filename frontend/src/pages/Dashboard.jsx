@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AlertTriangle, Clock, FileText, Library, ListChecks, Radio, Target } from 'lucide-react';
 import { documentAPI, errorMessage, statsAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import DocumentUpload from '../components/document/DocumentUpload';
 import DocumentList from '../components/document/DocumentList';
 import { forgetDocument } from '../components/document/DocumentLayout';

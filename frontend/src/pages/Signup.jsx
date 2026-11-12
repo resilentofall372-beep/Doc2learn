@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import { validateSignup } from '../utils/validators';
 import AuthLayout from '../components/common/AuthLayout';
 import LoadingSpinner from '../components/common/LoadingSpinner';

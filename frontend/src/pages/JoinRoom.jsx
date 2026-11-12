@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Clock, FileText, Gauge, ListChecks, Users } from 'lucide-react';
 import { errorMessage, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import Avatar, { AVATAR_COLORS } from '../components/ui/Avatar';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner, { PageLoader } from '../components/common/LoadingSpinner';

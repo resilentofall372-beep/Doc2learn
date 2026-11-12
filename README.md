@@ -74,7 +74,7 @@ Restart with `docker compose up --build`. The lobby's invite link and "players j
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env          # set LLM_API_KEY and MONGO_URI
+cp ../.env.example .env       # set LLM_API_KEY and MONGO_URI
 python run.py                 # http://localhost:5000/api/health
 
 # Frontend, in another terminal

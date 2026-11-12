@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, LogOut, Menu, Radio, X } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../contexts/AuthContext';
 import Logo from '../ui/Logo';
 import Avatar from '../ui/Avatar';
 import ThemeToggle from './ThemeToggle';

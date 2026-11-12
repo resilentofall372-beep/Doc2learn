@@ -12,7 +12,7 @@ const stats = (p) => {
   return { correct, answered: answers.length, avgTime };
 };
 
-const QuizResults = ({ room, participants, totalQuestions, isHost, review = [] }) => {
+const RoomResults = ({ room, participants, totalQuestions, isHost, review = [] }) => {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const ranked = participants?.slice().sort((a, b) => (b.score || 0) - (a.score || 0)) || [];
@@ -148,4 +148,4 @@ const QuizResults = ({ room, participants, totalQuestions, isHost, review = [] }
   );
 };
 
-export default QuizResults;
+export default RoomResults;

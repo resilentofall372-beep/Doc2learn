@@ -1,7 +1,3 @@
-export const APP_CONFIG = {
-  APP_NAME: import.meta.env.VITE_APP_NAME || 'Doc2Learn',
-};
-
 export const QUIZ_PREFERENCES = {
   QUESTION_COUNTS: [3, 5, 10, 15, 20],
   DIFFICULTY_LEVELS: ['easy', 'medium', 'hard'],
