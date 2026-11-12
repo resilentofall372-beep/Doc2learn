@@ -1,0 +1,46 @@
+# One command to run everything:  docker compose up --build
+# Then open http://localhost:8080
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        PREFETCH_EMBEDDINGS: ${PREFETCH_EMBEDDINGS:-true}
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://mongo:27017/doc2learn
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-4o-mini}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+      EMBEDDINGS_ENABLED: ${EMBEDDINGS_ENABLED:-true}
+    volumes:
+      - embedding_models:/models
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "5000:5000"   # handy for curl/health checks; the UI goes through nginx
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo_data:
+  embedding_models:
