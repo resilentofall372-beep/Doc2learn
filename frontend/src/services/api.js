@@ -24,10 +24,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401 && storage.get(STORAGE_KEYS.AUTH_TOKEN)) {
-      // Token expired or revoked: drop the session and send the user to login.
+      // Token expired or revoked (e.g. logged out on another device): drop the session.
       storage.remove(STORAGE_KEYS.AUTH_TOKEN);
       storage.remove(STORAGE_KEYS.USER_DATA);
-      if (!window.location.pathname.startsWith('/login')) {
+      if (!['/login', '/signup', '/'].includes(window.location.pathname)) {
         window.location.assign('/login');
       }
     }
@@ -39,52 +39,69 @@ api.interceptors.response.use(
 export const errorMessage = (error, fallback = 'Something went wrong') =>
   error?.response?.data?.error || error?.message || fallback;
 
+/** Request body for a scope: the whole project, or one document in it. */
+const scope = (projectId, documentId) => ({ project_id: projectId, ...(documentId ? { document_id: documentId } : {}) });
+
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
+  logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
 };
 
+export const projectAPI = {
+  list: () => api.get('/projects/'),
+  create: (data) => api.post('/projects/', data),
+  get: (projectId) => api.get(`/projects/${projectId}`),
+  update: (projectId, data) => api.patch(`/projects/${projectId}`, data),
+  remove: (projectId) => api.delete(`/projects/${projectId}`),
+  stats: (projectId) => api.get(`/projects/${projectId}/stats`),
+};
+
 export const documentAPI = {
-  uploadDocument: (formData) =>
-    api.post('/document/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  getDocuments: () => api.get('/document/'),
+  upload: (projectId, file) => {
+    const form = new FormData();
+    form.append('project_id', projectId);
+    form.append('file', file);
+    return api.post('/document/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   getDocument: (documentId) => api.get(`/document/${documentId}`),
   deleteDocument: (documentId) => api.delete(`/document/${documentId}`),
-  generateQuiz: ({ document_id, num_questions, difficulty, focus }) =>
-    api.post('/document/generate-quiz', { document_id, num_questions, difficulty, focus }),
-  generateFlashcards: ({ document_id, num_cards }) =>
-    api.post('/document/generate-flashcards', { document_id, num_cards }),
-  generateMindmap: ({ document_id }) => api.post('/document/generate-mindmap', { document_id }),
+  generateQuiz: ({ projectId, documentId, num_questions, difficulty, focus }) =>
+    api.post('/document/generate-quiz', { ...scope(projectId, documentId), num_questions, difficulty, focus }),
+  generateFlashcards: ({ projectId, documentId, num_cards }) =>
+    api.post('/document/generate-flashcards', { ...scope(projectId, documentId), num_cards }),
+  generateMindmap: ({ projectId, documentId }) => api.post('/document/generate-mindmap', scope(projectId, documentId)),
 };
 
 export const quizAPI = {
   submitQuiz: ({ quiz_id, answers, time_spent_seconds }) =>
     api.post('/quiz/submit', { quiz_id, answers, time_spent_seconds }),
   getQuiz: (quizId) => api.get(`/quiz/${quizId}`),
-  getDocumentAttempts: (documentId) => api.get(`/quiz/document/${documentId}`),
+  getProjectAttempts: (projectId) => api.get(`/quiz/project/${projectId}`),
 };
 
 export const flashcardsAPI = {
   generate: documentAPI.generateFlashcards,
-  getFlashcards: (documentId) => api.get(`/flashcards/document/${documentId}`),
+  getFlashcards: (projectId, documentId) => api.get('/flashcards/', { params: scope(projectId, documentId) }),
 };
 
 export const mindmapAPI = {
   generate: documentAPI.generateMindmap,
-  getMindmap: (documentId) => api.get(`/mindmap/document/${documentId}`),
+  getMindmap: (projectId, documentId) => api.get('/mindmap/', { params: scope(projectId, documentId) }),
 };
 
 export const assistantAPI = {
-  chat: (documentId, question) => api.post('/assistant/chat', { document_id: documentId, question }),
-  explainConcept: (documentId, concept) => api.post('/assistant/explain', { document_id: documentId, concept }),
-  generatePractice: (documentId, topic, numProblems = 5) =>
-    api.post('/assistant/practice', { document_id: documentId, topic, num_problems: numProblems }),
-  summarizeDocument: (documentId, summaryType = 'brief') =>
-    api.post('/assistant/summarize', { document_id: documentId, summary_type: summaryType }),
-  createStudyPlan: (documentId, weakAreas, days = 7) =>
-    api.post('/assistant/study-plan', { document_id: documentId, weak_areas: weakAreas, days }),
-  getChatHistory: (documentId) => api.get(`/assistant/chat/history/${documentId}`),
+  chat: (projectId, question) => api.post('/assistant/chat', { project_id: projectId, question }),
+  explainConcept: (projectId, documentId, concept) =>
+    api.post('/assistant/explain', { ...scope(projectId, documentId), concept }),
+  generatePractice: (projectId, documentId, topic, numProblems = 5) =>
+    api.post('/assistant/practice', { ...scope(projectId, documentId), topic, num_problems: numProblems }),
+  summarize: (projectId, documentId, summaryType = 'brief') =>
+    api.post('/assistant/summarize', { ...scope(projectId, documentId), summary_type: summaryType }),
+  createStudyPlan: (projectId, documentId, weakAreas, days = 7) =>
+    api.post('/assistant/study-plan', { ...scope(projectId, documentId), weak_areas: weakAreas, days }),
+  getChatHistory: (projectId) => api.get(`/assistant/chat/history/${projectId}`),
   clearChat: (sessionId) => api.post('/assistant/chat/clear', { session_id: sessionId }),
 };
 

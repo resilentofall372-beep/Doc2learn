@@ -65,7 +65,7 @@ def app(monkeypatch):
         return {}
 
     def fake_complete(messages, **kwargs):
-        return "Photosynthesis happens in chloroplasts [Page 1]."
+        return "Photosynthesis happens in chloroplasts [Doc 1, Page 1]."
 
     monkeypatch.setattr(generation, "complete_json", fake_complete_json)
     monkeypatch.setattr(generation, "complete", fake_complete)
@@ -90,13 +90,25 @@ def auth(client):
     return _make
 
 
+def make_project(client, headers, name="Biology 101"):
+    res = client.post("/api/projects/", json={"name": name}, headers=headers)
+    assert res.status_code == 201, res.get_json()
+    return res.get_json()["project"]["_id"]
+
+
+def upload(client, headers, project_id, text=SAMPLE_TEXT, filename="notes.txt"):
+    data = {"file": (io.BytesIO(text.encode()), filename), "project_id": project_id}
+    return client.post("/api/document/upload", data=data, headers=headers, content_type="multipart/form-data")
+
+
 @pytest.fixture()
 def document(client, auth):
+    """A user with one project holding one document: (headers, user, document_id, project_id)."""
     headers, user = auth()
-    data = {"file": (io.BytesIO(SAMPLE_TEXT.encode()), "notes.txt")}
-    res = client.post("/api/document/upload", data=data, headers=headers, content_type="multipart/form-data")
+    project_id = make_project(client, headers)
+    res = upload(client, headers, project_id)
     assert res.status_code == 201, res.get_json()
-    return headers, user, res.get_json()["document_id"]
+    return headers, user, res.get_json()["document_id"], project_id
 
 
 @pytest.fixture()

@@ -1,4 +1,10 @@
-"""Password hashing, JWT issuing/verification and the `require_auth` decorator."""
+"""Password hashing, JWT issuing/verification and the `require_auth` decorator.
+
+Sessions are stateless JWTs (HS256, signed with SECRET_KEY) sent as
+`Authorization: Bearer <token>`. Each token also carries the user's
+`token_version`; logging out bumps that number, which invalidates every token
+issued before it, on every device.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -24,21 +30,21 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def issue_token(user_id: str) -> str:
+def issue_token(user: dict) -> str:
     now = datetime.now(timezone.utc)
     payload = {
-        "sub": user_id,
+        "sub": str(user["_id"]),
+        "ver": int(user.get("token_version", 0)),
         "iat": now,
         "exp": now + timedelta(hours=current_app.config["JWT_EXPIRES_HOURS"]),
     }
     return jwt.encode(payload, current_app.config["SECRET_KEY"], algorithm="HS256")
 
 
-def decode_token(token: str) -> str | None:
-    """Return the user id in a valid token, or None."""
+def decode_token(token: str) -> dict | None:
+    """Return the payload of a valid, unexpired token, or None."""
     try:
-        payload = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
-        return payload.get("sub")
+        return jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
     except jwt.PyJWTError:
         return None
 
@@ -57,10 +63,19 @@ def public_user(doc: dict) -> dict:
 def user_from_token(token: str | None) -> dict | None:
     if not token:
         return None
-    user_id = decode_token(token)
+    payload = decode_token(token)
+    if not payload:
+        return None
+    user_id = payload.get("sub")
     if not user_id or not ObjectId.is_valid(user_id):
         return None
-    return get_db()[Collections.USERS].find_one({"_id": ObjectId(user_id)})
+    user = get_db()[Collections.USERS].find_one({"_id": ObjectId(user_id)})
+    if user is None:
+        return None
+    # A logout raises token_version, so older tokens no longer match.
+    if int(payload.get("ver", 0)) != int(user.get("token_version", 0)):
+        return None
+    return user
 
 
 def _bearer_token() -> str | None:

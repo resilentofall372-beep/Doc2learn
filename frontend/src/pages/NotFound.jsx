@@ -9,7 +9,7 @@ const NotFound = () => (
       icon={Compass}
       title="Page not found"
       description="The page you're looking for doesn't exist or has moved."
-      action={<Link to="/dashboard" className="btn btn-primary">Go to library</Link>}
+      action={<Link to="/" className="btn btn-primary">Go to home page</Link>}
     />
   </div>
 );

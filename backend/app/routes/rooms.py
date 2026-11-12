@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from flask import Blueprint, g, jsonify, request
 
+from ..access import owned_document, resolve_scope
 from ..auth import optional_auth, require_auth
 from ..errors import ApiError
-from ..extensions import Collections, get_db
 from ..services import rooms
-from ..utils import clamp, clean_str, to_object_id
+from ..utils import clamp, clean_str
 
 bp = Blueprint("rooms", __name__)
 
@@ -22,21 +22,19 @@ def create():
     room_name = clean_str(data.get("room_name"), 60) or f"{g.user['name']}'s quiz"
     difficulty = data.get("difficulty") if data.get("difficulty") in DIFFICULTIES else "medium"
 
-    document_id = data.get("document_id") or None
+    # Questions come from one of the host's projects (optionally narrowed to one document).
+    scope = resolve_scope(data)
     document_name = None
-    if document_id:
-        doc = get_db()[Collections.DOCUMENTS].find_one(
-            {"_id": to_object_id(document_id, "document id")}, {"user_id": 1, "filename": 1}
-        )
-        if not doc or doc["user_id"] != g.user_id:
-            raise ApiError("Document not found", 404)
-        document_name = doc["filename"]
+    if scope["document_id"]:
+        document_name = owned_document(scope["document_id"], {"filename": 1}).get("filename")
 
     room, host = rooms.create_room(
         host_id=g.user_id,
         host_name=g.user["name"],
         room_name=room_name,
-        document_id=document_id,
+        project_id=scope["project_id"],
+        project_name=scope["project"].get("name"),
+        document_id=scope["document_id"],
         document_name=document_name,
         num_questions=clamp(data.get("num_questions"), 3, 25, 10),
         time_per_question=clamp(data.get("time_per_question"), 10, 120, 30),

@@ -40,6 +40,7 @@ def create_app(config: type[Config] | None = None, db=None) -> Flask:
     )
 
     from .routes.auth import bp as auth_bp
+    from .routes.projects import bp as projects_bp
     from .routes.documents import bp as documents_bp
     from .routes.quiz import bp as quiz_bp
     from .routes.flashcards import bp as flashcards_bp
@@ -50,6 +51,7 @@ def create_app(config: type[Config] | None = None, db=None) -> Flask:
     from . import sockets
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    app.register_blueprint(projects_bp, url_prefix="/api/projects")
     app.register_blueprint(documents_bp, url_prefix="/api/document")
     app.register_blueprint(quiz_bp, url_prefix="/api/quiz")
     app.register_blueprint(flashcards_bp, url_prefix="/api/flashcards")

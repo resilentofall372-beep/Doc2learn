@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, LogOut, Menu, Radio, X } from 'lucide-react';
+import { FolderOpen, LogOut, Menu, Radio, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import Logo from '../ui/Logo';
 import Avatar from '../ui/Avatar';
@@ -8,19 +8,41 @@ import ThemeToggle from './ThemeToggle';
 import Notification from './Notification';
 
 const NAV = [
-  { to: '/dashboard', label: 'Library', icon: LayoutDashboard, match: ['/dashboard', '/document'] },
+  { to: '/projects', label: 'Projects', icon: FolderOpen, match: ['/projects'] },
   { to: '/study-rooms', label: 'Live quizzes', icon: Radio, match: ['/study-rooms', '/create-quiz-room', '/room', '/join'] },
 ];
 
-const SidebarContent = ({ onNavigate }) => {
-  const { user, logout } = useAuth();
-  const { pathname } = useLocation();
+export const LogoutButton = ({ className = '', withLabel = false }) => {
+  const { logout } = useAuth();
   const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        await logout();
+        navigate('/', { replace: true });
+      }}
+      className={`btn btn-ghost ${withLabel ? '' : 'btn-icon'} ${className}`}
+      aria-label="Log out"
+      title="Log out"
+    >
+      <LogOut className="h-4 w-4" />
+      {withLabel && 'Log out'}
+    </button>
+  );
+};
+
+const SidebarContent = ({ onNavigate }) => {
+  const { user } = useAuth();
+  const { pathname } = useLocation();
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center px-4">
-        <Logo to="/dashboard" />
+        <Logo to="/projects" />
       </div>
 
       <nav className="flex-1 space-y-0.5 px-3 py-4" aria-label="Main">
@@ -52,18 +74,7 @@ const SidebarContent = ({ onNavigate }) => {
             <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{user?.name}</p>
             <p className="muted truncate text-xs">{user?.email}</p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              logout();
-              navigate('/login');
-            }}
-            className="btn btn-ghost btn-icon"
-            aria-label="Sign out"
-            title="Sign out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <LogoutButton />
         </div>
       </div>
     </div>
@@ -83,7 +94,7 @@ const AppShell = ({ children }) => {
       </aside>
 
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-zinc-200 bg-white/90 px-4 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90 lg:hidden">
-        <Logo to="/dashboard" />
+        <Logo to="/projects" />
         <button type="button" className="btn btn-ghost btn-icon" onClick={() => setOpen(true)} aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </button>
@@ -119,11 +130,14 @@ const PublicShell = ({ children }) => (
   <div className="min-h-screen">
     <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Logo to="/login" />
+        <Logo to="/" />
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Link to="/login" className="btn btn-secondary btn-sm">
-            Sign in
+          <Link to="/login" className="btn btn-ghost btn-sm">
+            Log in
+          </Link>
+          <Link to="/signup" className="btn btn-primary btn-sm">
+            Sign up
           </Link>
         </div>
       </div>

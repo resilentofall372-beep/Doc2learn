@@ -6,15 +6,16 @@ def _events(received, name):
 
 
 def test_room_lifecycle_over_sockets(client, document, sio):
-    headers, host_user, doc_id = document
+    headers, host_user, doc_id, project_id = document
 
     created = client.post(
         "/api/room/create",
-        json={"room_name": "Bio battle", "document_id": doc_id, "num_questions": 2, "time_per_question": 20},
+        json={"room_name": "Bio battle", "project_id": project_id, "document_id": doc_id, "num_questions": 2, "time_per_question": 20},
         headers=headers,
     )
     assert created.status_code == 201, created.get_json()
     room = created.get_json()
+    assert room["room"]["project_id"] == project_id and room["room"]["project_name"] == "Biology 101"
     assert room["room"]["participants"][0]["is_host"] is True
     assert "token" not in room["room"]["participants"][0]
 
@@ -75,16 +76,16 @@ def test_room_lifecycle_over_sockets(client, document, sio):
     assert client.post("/api/room/join", json={"room_code": room["room_code"], "participant_name": "Late"}).status_code == 409
 
 
-def test_room_requires_owned_document(client, auth, document):
-    _, _, doc_id = document
+def test_room_requires_owned_project(client, auth, document):
+    _, _, doc_id, project_id = document
     other_headers, _ = auth(email="eve@example.com", name="Eve")
-    res = client.post("/api/room/create", json={"room_name": "x", "document_id": doc_id}, headers=other_headers)
+    res = client.post("/api/room/create", json={"room_name": "x", "project_id": project_id, "document_id": doc_id}, headers=other_headers)
     assert res.status_code == 404
 
 
-def test_host_leaving_closes_room(client, auth):
-    headers, _ = auth()
-    room = client.post("/api/room/create", json={"room_name": "Solo"}, headers=headers).get_json()
+def test_host_leaving_closes_room(client, document):
+    headers, _, _, project_id = document
+    room = client.post("/api/room/create", json={"room_name": "Solo", "project_id": project_id}, headers=headers).get_json()
     res = client.post(
         "/api/room/leave",
         json={"room_id": room["room_id"], "participant_id": room["participant_id"], "participant_token": room["participant_token"]},

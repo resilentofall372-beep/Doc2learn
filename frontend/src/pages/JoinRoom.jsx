@@ -87,10 +87,10 @@ const JoinRoom = () => {
           <span className="badge badge-neutral font-mono tracking-widest">{room.room_code}</span>
           <h1 className="mt-3 text-xl font-semibold tracking-tight">{room.room_name}</h1>
           <p className="muted mt-1 text-sm">Hosted by {room.host_name}</p>
-          {room.document_name && (
+          {(room.document_name || room.project_name) && (
             <p className="muted mt-2 inline-flex items-center gap-1 text-xs">
               <FileText className="h-3.5 w-3.5" />
-              {room.document_name}
+              {room.document_name || room.project_name}
             </p>
           )}
           <div className="mt-5 grid grid-cols-2 gap-2 text-left">

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Download, Plus, Trophy } from 'lucide-react';
 import Avatar from '../ui/Avatar';
+import { sourceLabel } from '../ui/RichText';
 
 const MEDALS = ['text-amber-500', 'text-zinc-400', 'text-orange-600'];
 
@@ -138,7 +139,11 @@ const RoomResults = ({ room, participants, totalQuestions, isHost, review = [] }
                   {q.answer}. {q.options?.[q.answer]}
                 </p>
                 {q.explanation && <p className="mt-1.5 text-zinc-600 dark:text-zinc-400">{q.explanation}</p>}
-                {q.source_page && <span className="badge badge-neutral mt-2">Page {q.source_page}</span>}
+                {(q.source_document || q.source_page) && (
+                  <span className="badge badge-neutral mt-2">
+                    {sourceLabel({ filename: q.source_document?.filename, page: q.source_page })}
+                  </span>
+                )}
               </li>
             ))}
           </ol>

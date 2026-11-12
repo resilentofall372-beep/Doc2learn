@@ -25,7 +25,17 @@ const Flashcard = ({ card, showAnswer, onFlip }) => (
       <Face label="Question" footer="Click or press Space to reveal">
         <p className="text-xl font-medium leading-relaxed text-zinc-900 dark:text-zinc-50">{card.front}</p>
       </Face>
-      <Face back label="Answer" footer={card.source_page ? `From page ${card.source_page}` : 'Click to flip back'}>
+      <Face
+        back
+        label="Answer"
+        footer={
+          card.source_document
+            ? `From ${card.source_document.filename}${card.source_page ? `, page ${card.source_page}` : ''}`
+            : card.source_page
+              ? `From page ${card.source_page}`
+              : 'Click to flip back'
+        }
+      >
         <p className="text-base leading-relaxed text-zinc-800 dark:text-zinc-200">{card.back}</p>
       </Face>
     </div>

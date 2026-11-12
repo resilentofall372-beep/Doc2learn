@@ -7,7 +7,7 @@ import LoadingSpinner from '../common/LoadingSpinner';
 
 const extensionOf = (name) => `.${(name.split('.').pop() || '').toLowerCase()}`;
 
-const DocumentUpload = ({ onUpload, compact = false }) => {
+const DocumentUpload = ({ projectId, onUpload, compact = false }) => {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef(null);
@@ -25,9 +25,7 @@ const DocumentUpload = ({ onUpload, compact = false }) => {
     }
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await documentAPI.uploadDocument(formData);
+      const res = await documentAPI.upload(projectId, file);
       const { document, warnings } = res.data;
       addNotification({ type: 'success', title: 'Document ready', message: `${document.filename} is indexed and ready to study.` });
       (warnings || []).forEach((w) => addNotification({ type: 'info', title: 'Note', message: w }));

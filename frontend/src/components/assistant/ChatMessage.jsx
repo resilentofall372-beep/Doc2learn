@@ -1,11 +1,11 @@
 import React from 'react';
 import { AlertCircle, BookOpen } from 'lucide-react';
-import RichText from '../ui/RichText';
+import RichText, { sourceLabel } from '../ui/RichText';
 
 const CONFIDENCE = {
-  high: { label: 'Grounded in the document', className: 'badge-success' },
+  high: { label: 'Grounded in your documents', className: 'badge-success' },
   medium: { label: 'Partly grounded', className: 'badge-warning' },
-  low: { label: 'Not covered by the document', className: 'badge-neutral' },
+  low: { label: 'Not covered by your documents', className: 'badge-neutral' },
 };
 
 const formatTime = (timestamp) =>
@@ -22,7 +22,8 @@ const ChatMessage = ({ message }) => {
     );
   }
 
-  const sources = message.metadata?.sources || [];
+  // Older messages stored sources as plain page numbers; newer ones as {filename, page}.
+  const sources = (message.metadata?.sources || []).map((s) => (typeof s === 'number' ? { page: s } : s));
   const confidence = CONFIDENCE[message.metadata?.confidence];
 
   return (
@@ -39,16 +40,13 @@ const ChatMessage = ({ message }) => {
       <div className="min-w-0 flex-1">
         <RichText
           text={message.content}
+          legend={message.metadata?.legend}
           className={`text-sm ${message.isError ? 'text-red-700 dark:text-red-300' : 'text-zinc-700 dark:text-zinc-300'}`}
         />
         {(sources.length > 0 || confidence) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {confidence && <span className={`badge ${confidence.className}`}>{confidence.label}</span>}
-            {sources.length > 0 && (
-              <span className="muted text-xs">
-                Sources: {sources.map((page) => `p. ${page}`).join(', ')}
-              </span>
-            )}
+            {sources.length > 0 && <span className="muted text-xs">Sources: {sources.map(sourceLabel).join('; ')}</span>}
           </div>
         )}
         {message.timestamp && <p className="mt-2 text-[11px] text-zinc-400">{formatTime(message.timestamp)}</p>}

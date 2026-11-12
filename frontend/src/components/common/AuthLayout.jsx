@@ -1,37 +1,24 @@
 import React from 'react';
-import { BookOpenCheck, Quote, Radio, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import Logo from '../ui/Logo';
 import ThemeToggle from './ThemeToggle';
 import Notification from './Notification';
+import { PRODUCT_POINTS } from '../../utils/productPoints';
 
-const POINTS = [
-  {
-    icon: Quote,
-    title: 'Answers you can check',
-    text: 'The tutor answers only from your document and cites the page each answer comes from.',
-  },
-  {
-    icon: BookOpenCheck,
-    title: 'Practice that adapts',
-    text: 'Quizzes, flashcards and a study plan that leans on the topics you get wrong.',
-  },
-  {
-    icon: Radio,
-    title: 'Study together',
-    text: 'Host a live quiz from any document. Friends join with a six-letter code.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Private by default',
-    text: 'Your documents are visible only to you.',
-  },
-];
+const POINTS = PRODUCT_POINTS.slice(1);
 
 const AuthLayout = ({ title, subtitle, children, footer }) => (
   <div className="grid min-h-screen lg:grid-cols-2">
     <div className="flex flex-col px-6 py-6 sm:px-10">
       <div className="flex items-center justify-between">
-        <Logo to="/login" />
+        <div className="flex items-center gap-4">
+          <Logo to="/" />
+          <Link to="/" className="muted hidden items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-zinc-100 sm:inline-flex">
+            <ChevronLeft className="h-4 w-4" />
+            Home
+          </Link>
+        </div>
         <ThemeToggle />
       </div>
       <div className="flex flex-1 items-center justify-center py-12">

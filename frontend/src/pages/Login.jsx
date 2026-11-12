@@ -30,7 +30,7 @@ const Login = () => {
     setLoading(true);
     const result = await login(form);
     setLoading(false);
-    if (result.success) navigate('/dashboard');
+    if (result.success) navigate('/projects');
     else setFormError(result.error);
   };
 

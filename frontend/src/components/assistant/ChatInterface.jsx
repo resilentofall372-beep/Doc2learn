@@ -3,14 +3,16 @@ import { ArrowUp, BookOpen, RotateCcw } from 'lucide-react';
 import { assistantAPI, errorMessage } from '../../services/api';
 import ChatMessage from './ChatMessage';
 
+const CROSS_DOC_PROMPT = 'How do these documents connect?';
 const SUGGESTIONS = [
   'Summarise the main ideas',
   'Which concepts should I learn first?',
-  'Explain the hardest idea simply',
+  CROSS_DOC_PROMPT, // only offered when the project has more than one document
   'What might an exam ask about this?',
 ];
 
-const ChatInterface = ({ documentId, document }) => {
+/** Tutor chat for a whole project: answers search every document and cite file + page. */
+const ChatInterface = ({ projectId, project, documents }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,13 +22,13 @@ const ChatInterface = ({ documentId, document }) => {
 
   const loadHistory = useCallback(async () => {
     try {
-      const res = await assistantAPI.getChatHistory(documentId);
+      const res = await assistantAPI.getChatHistory(projectId);
       setMessages(res.data.messages || []);
       setSessionId(res.data.session_id);
     } catch {
       setMessages([]);
     }
-  }, [documentId]);
+  }, [projectId]);
 
   useEffect(() => {
     loadHistory();
@@ -44,7 +46,7 @@ const ChatInterface = ({ documentId, document }) => {
     setInput('');
     setLoading(true);
     try {
-      const res = await assistantAPI.chat(documentId, question);
+      const res = await assistantAPI.chat(projectId, question);
       setSessionId(res.data.session_id);
       setMessages((prev) => [
         ...prev,
@@ -52,7 +54,7 @@ const ChatInterface = ({ documentId, document }) => {
           role: 'assistant',
           content: res.data.answer,
           timestamp: new Date().toISOString(),
-          metadata: { sources: res.data.sources, confidence: res.data.confidence },
+          metadata: { sources: res.data.sources, confidence: res.data.confidence, legend: res.data.legend },
         },
       ]);
     } catch (error) {
@@ -77,12 +79,14 @@ const ChatInterface = ({ documentId, document }) => {
     setMessages([]);
   };
 
+  const fileCount = `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`;
+
   return (
     <section className="card flex h-[calc(100vh-17rem)] min-h-[30rem] flex-col">
       <div className="card-header py-3">
         <div>
           <h2 className="card-title">Tutor</h2>
-          <p className="muted text-xs">Answers come only from this document, with page references.</p>
+          <p className="muted text-xs">Searches all {fileCount} in this project and cites the file and page.</p>
         </div>
         {messages.length > 0 && (
           <button type="button" onClick={clear} className="btn btn-ghost btn-sm">
@@ -98,16 +102,17 @@ const ChatInterface = ({ documentId, document }) => {
             <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-400">
               <BookOpen className="h-5 w-5" />
             </div>
-            <h3 className="mt-4 text-sm font-semibold">Ask anything about {document.filename}</h3>
+            <h3 className="mt-4 text-sm font-semibold">Ask anything about {project.name}</h3>
             <p className="muted mt-1 max-w-sm text-sm">
-              If the document doesn&apos;t cover something, the tutor will say so instead of guessing.
+              If your documents don&apos;t cover something, the tutor will say so instead of guessing.
             </p>
             <div className="mt-6 grid w-full max-w-lg gap-2 sm:grid-cols-2">
-              {SUGGESTIONS.map((prompt) => (
-                <button key={prompt} type="button" onClick={() => send(prompt)} className="choice text-left font-normal">
-                  {prompt}
-                </button>
-              ))}
+              {SUGGESTIONS.filter((prompt) => documents.length > 1 || prompt !== CROSS_DOC_PROMPT)
+                .map((prompt) => (
+                  <button key={prompt} type="button" onClick={() => send(prompt)} className="choice text-left font-normal">
+                    {prompt}
+                  </button>
+                ))}
             </div>
           </div>
         ) : (
@@ -147,7 +152,7 @@ const ChatInterface = ({ documentId, document }) => {
               }
             }}
             rows={1}
-            placeholder="Ask a question about this document"
+            placeholder="Ask a question about this project"
             className="max-h-40 min-h-[2.25rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm placeholder:text-zinc-400 focus:outline-none"
             disabled={loading}
             aria-label="Your question"

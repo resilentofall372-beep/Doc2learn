@@ -13,6 +13,11 @@ export const useAuth = () => {
   return context;
 };
 
+const clearSession = () => {
+  storage.remove(STORAGE_KEYS.AUTH_TOKEN);
+  storage.remove(STORAGE_KEYS.USER_DATA);
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => storage.get(STORAGE_KEYS.USER_DATA));
   const [loading, setLoading] = useState(true);
@@ -23,9 +28,14 @@ export const AuthProvider = ({ children }) => {
     setUser(userInfo);
   }, []);
 
-  const logout = useCallback(() => {
-    storage.remove(STORAGE_KEYS.AUTH_TOKEN);
-    storage.remove(STORAGE_KEYS.USER_DATA);
+  /** Revoke the session on the server (all devices), then forget it locally. */
+  const logout = useCallback(async () => {
+    try {
+      if (storage.get(STORAGE_KEYS.AUTH_TOKEN)) await authAPI.logout();
+    } catch {
+      /* the token may already be invalid; clearing locally is enough then */
+    }
+    clearSession();
     setUser(null);
   }, []);
 
@@ -34,6 +44,7 @@ export const AuthProvider = ({ children }) => {
     let cancelled = false;
     const token = storage.get(STORAGE_KEYS.AUTH_TOKEN);
     if (!token) {
+      setUser(null);
       setLoading(false);
       return undefined;
     }
@@ -46,7 +57,10 @@ export const AuthProvider = ({ children }) => {
         }
       })
       .catch(() => {
-        if (!cancelled) logout();
+        if (!cancelled) {
+          clearSession();
+          setUser(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -54,7 +68,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [logout]);
+  }, []);
 
   const login = useCallback(
     async ({ email, password }) => {

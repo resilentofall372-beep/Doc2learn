@@ -29,7 +29,8 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
     setGenerating(true);
     try {
       const res = await documentAPI.generateQuiz({
-        document_id: room.document_id,
+        projectId: room.project_id,
+        documentId: room.document_id,
         num_questions: room.num_questions,
         difficulty: room.difficulty,
       });
@@ -77,7 +78,7 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
             <span>{room.num_questions} questions</span>
             <span>{room.time_per_question}s per question</span>
             <span className="capitalize">{room.difficulty}</span>
-            {room.document_name && <span>{room.document_name}</span>}
+            {(room.document_name || room.project_name) && <span>{room.document_name || room.project_name}</span>}
           </div>
         </section>
 

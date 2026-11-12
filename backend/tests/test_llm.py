@@ -18,16 +18,12 @@ def test_missing_key_gives_clear_503(client, auth, app, monkeypatch):
 
     monkeypatch.setattr(generation, "complete_json", lambda *a, **k: llm.complete_json(*a, **k))
     app.config["LLM_API_KEY"] = ""
-    headers, _ = auth()
-    import io
+    from tests.conftest import make_project, upload
 
-    doc = client.post(
-        "/api/document/upload",
-        data={"file": (io.BytesIO(b"Some reasonably long text about plants and chloroplasts " * 5), "n.txt")},
-        headers=headers,
-        content_type="multipart/form-data",
-    ).get_json()
-    res = client.post("/api/document/generate-quiz", json={"document_id": doc["document_id"]}, headers=headers)
+    headers, _ = auth()
+    project_id = make_project(client, headers)
+    upload(client, headers, project_id, text="Some reasonably long text about plants and chloroplasts " * 5)
+    res = client.post("/api/document/generate-quiz", json={"project_id": project_id}, headers=headers)
     assert res.status_code == 503
     assert "LLM_API_KEY" in res.get_json()["error"]
 

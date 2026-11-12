@@ -2,12 +2,28 @@ import React from 'react';
 
 /**
  * Minimal, safe formatter for model output: paragraphs, bullet and numbered
- * lists, **bold**, `code`, ### headings, and [Page N] citations rendered as chips.
+ * lists, **bold**, `code`, ### headings, and citations rendered as chips.
+ *
+ * Citations look like [Doc 2, Page 3] (or older [Page 3]). `legend` maps the
+ * Doc number to {filename}, so a chip reads "lecture-3.pdf · p. 3".
  * Builds React elements only, so model text can never inject HTML.
  */
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[Pages?\s+[\d,\s–-]+\])/g;
+const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[Doc\s*\d+(?:\s*,\s*Pages?\s*[\d,\s–-]+)?\]|\[Pages?\s+[\d,\s–-]+\])/gi;
+const DOC_CITE = /^\[Doc\s*(\d+)(?:\s*,\s*Pages?\s*([\d,\s–-]+))?\]$/i;
+const PAGE_CITE = /^\[Pages?\s+([\d,\s–-]+)\]$/i;
 
-const renderInline = (text, keyPrefix) =>
+const shortName = (name = '') => (name.length > 28 ? `${name.slice(0, 25)}…` : name);
+
+const Chip = ({ label, title }) => (
+  <span
+    className="mx-0.5 inline-flex max-w-full items-center rounded border border-primary-200 bg-primary-50 px-1.5 align-baseline text-[11px] font-medium leading-5 text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300"
+    title={title}
+  >
+    {label}
+  </span>
+);
+
+const renderInline = (text, keyPrefix, legend) =>
   text.split(INLINE).map((part, i) => {
     const key = `${keyPrefix}-${i}`;
     if (!part) return null;
@@ -25,17 +41,17 @@ const renderInline = (text, keyPrefix) =>
         </code>
       );
     }
-    const cite = /^\[Pages?\s+([\d,\s–-]+)\]$/.exec(part);
-    if (cite) {
-      return (
-        <span
-          key={key}
-          className="mx-0.5 inline-flex items-center rounded border border-primary-200 bg-primary-50 px-1.5 align-baseline text-[11px] font-medium leading-5 text-primary-700 dark:border-primary-500/30 dark:bg-primary-500/10 dark:text-primary-300"
-          title="Source page in your document"
-        >
-          p. {cite[1].trim()}
-        </span>
-      );
+    const doc = DOC_CITE.exec(part);
+    if (doc) {
+      const filename = legend?.[String(Number(doc[1]))]?.filename;
+      const page = doc[2]?.trim();
+      const name = filename ? shortName(filename) : `Doc ${doc[1]}`;
+      const label = page ? `${name} · p. ${page}` : name;
+      return <Chip key={key} label={label} title={`${filename || `Document ${doc[1]}`}${page ? `, page ${page}` : ''}`} />;
+    }
+    const pageOnly = PAGE_CITE.exec(part);
+    if (pageOnly) {
+      return <Chip key={key} label={`p. ${pageOnly[1].trim()}`} title="Source page in your document" />;
     }
     return <React.Fragment key={key}>{part}</React.Fragment>;
   });
@@ -44,7 +60,7 @@ const BULLET = /^\s*[-*•]\s+/;
 const NUMBER = /^\s*\d+[.)]\s+/;
 const HEADING = /^\s*#{1,4}\s+/;
 
-const RichText = ({ text = '', className = '' }) => {
+const RichText = ({ text = '', className = '', legend }) => {
   const blocks = [];
   let list = null;
 
@@ -55,7 +71,7 @@ const RichText = ({ text = '', className = '' }) => {
     }
   };
 
-  text.split('\n').forEach((raw, index) => {
+  text.split('\n').forEach((raw) => {
     const line = raw.trimEnd();
     if (!line.trim()) {
       flushList();
@@ -72,7 +88,7 @@ const RichText = ({ text = '', className = '' }) => {
     }
     flushList();
     if (HEADING.test(line)) {
-      blocks.push({ type: 'heading', text: line.replace(HEADING, '').replace(/\*\*/g, ''), index });
+      blocks.push({ type: 'heading', text: line.replace(HEADING, '').replace(/\*\*/g, '') });
       return;
     }
     const last = blocks[blocks.length - 1];
@@ -90,7 +106,7 @@ const RichText = ({ text = '', className = '' }) => {
         if (block.type === 'heading') {
           return (
             <p key={i} className="pt-1 font-semibold text-zinc-900 dark:text-zinc-50">
-              {renderInline(block.text, i)}
+              {renderInline(block.text, i, legend)}
             </p>
           );
         }
@@ -99,15 +115,22 @@ const RichText = ({ text = '', className = '' }) => {
           return (
             <Tag key={i} className={`space-y-1 pl-5 ${block.ordered ? 'list-decimal' : 'list-disc'} marker:text-zinc-400`}>
               {block.items.map((item, j) => (
-                <li key={j}>{renderInline(item, `${i}-${j}`)}</li>
+                <li key={j}>{renderInline(item, `${i}-${j}`, legend)}</li>
               ))}
             </Tag>
           );
         }
-        return <p key={i}>{renderInline(block.text, i)}</p>;
+        return <p key={i}>{renderInline(block.text, i, legend)}</p>;
       })}
     </div>
   );
+};
+
+/** "lecture.pdf · p. 3" for a {filename, page} source. */
+export const sourceLabel = (source) => {
+  if (!source) return '';
+  const name = source.filename || (source.doc ? `Doc ${source.doc}` : 'Document');
+  return source.page ? `${name} · p. ${source.page}` : name;
 };
 
 export default RichText;

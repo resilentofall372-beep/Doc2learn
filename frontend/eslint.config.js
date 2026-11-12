@@ -31,8 +31,10 @@ export default defineConfig([
     files: [
       'src/contexts/**/*.jsx',
       'src/components/ui/Avatar.jsx',
+      'src/components/ui/RichText.jsx',
+      'src/components/common/Layout.jsx',
       'src/components/common/LoadingSpinner.jsx',
-      'src/components/document/DocumentLayout.jsx',
+      'src/components/projects/ProjectLayout.jsx',
     ],
     rules: { 'react-refresh/only-export-components': 'off' },
   },

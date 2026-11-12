@@ -9,6 +9,10 @@ services:
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
+    # Lets MongoDB Compass / mongosh on this computer connect at mongodb://localhost:27017/doc2learn.
+    # Bound to 127.0.0.1 only: the database has no password, so it must not be reachable from the Wi-Fi.
+    ports:
+      - "127.0.0.1:27017:27017"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
       interval: 10s

@@ -12,7 +12,8 @@ def _csv(value: str) -> list[str]:
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
-    JWT_EXPIRES_HOURS = int(os.environ.get("JWT_EXPIRES_HOURS", "168"))
+    # Sessions last a day; logging out revokes every token for the user immediately.
+    JWT_EXPIRES_HOURS = int(os.environ.get("JWT_EXPIRES_HOURS", "24"))
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
 
     MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/doc2learn")
@@ -31,7 +32,7 @@ class Config:
     # LLM_* names are preferred; the OPENROUTER_* names still work as a fallback.
     LLM_API_KEY = os.environ.get("LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
     LLM_BASE_URL = os.environ.get("LLM_BASE_URL") or os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-    LLM_MODEL = os.environ.get("LLM_MODEL", "openai/gpt-4o-mini")
+    LLM_MODEL = os.environ.get("LLM_MODEL", "gemini-3.1-flash-lite")
     LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.4"))
     LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2500"))
     # Tried in order when the main model is overloaded, slow, retired or returns nothing.

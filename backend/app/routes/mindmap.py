@@ -1,15 +1,18 @@
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, g, jsonify, request
 
+from ..access import resolve_scope
 from ..auth import require_auth
 from ..extensions import Collections, get_db
-from .documents import owned_document
 
 bp = Blueprint("mindmap", __name__)
 
 
-@bp.get("/document/<document_id>")
+@bp.get("/")
 @require_auth
-def latest(document_id):
-    owned_document(document_id, {"_id": 1})
-    row = get_db()[Collections.MINDMAPS].find_one({"document_id": document_id, "user_id": g.user_id})
+def latest():
+    """Saved concept map for ?project_id=...&document_id=... (no document_id = whole project)."""
+    scope = resolve_scope(request.args)
+    row = get_db()[Collections.MINDMAPS].find_one(
+        {"project_id": scope["project_id"], "document_id": scope["document_id"], "user_id": g.user_id}
+    )
     return jsonify({"success": True, "mindmap": row["mindmap"] if row else None})

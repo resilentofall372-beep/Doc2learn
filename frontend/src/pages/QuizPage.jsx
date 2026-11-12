@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { documentAPI, errorMessage, quizAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
 import { QUIZ_PREFERENCES } from '../utils/constants';
-import DocumentLayout from '../components/document/DocumentLayout';
+import ProjectLayout from '../components/projects/ProjectLayout';
+import ScopePicker from '../components/projects/ScopePicker';
 import QuizQuestion from '../components/quiz/QuizQuestion';
 import QuizProgress from '../components/quiz/QuizProgress';
 import QuizResults from '../components/quiz/QuizResults';
 import Segmented from '../components/ui/Segmented';
+import { sourceLabel } from '../components/ui/RichText';
 import { PageLoader } from '../components/common/LoadingSpinner';
 
 const DIFFICULTY_OPTIONS = [
@@ -19,11 +21,18 @@ const DIFFICULTY_OPTIONS = [
 
 const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-const QuizPage = () => {
-  const { id: documentId } = useParams();
+const sourceOf = (item) =>
+  item.source_document ? { filename: item.source_document.filename, page: item.source_page } : item.source_page ? { page: item.source_page } : null;
+
+const Quiz = ({ projectId, documents }) => {
   const { addNotification } = useApp();
+  const [params] = useSearchParams();
 
   const [phase, setPhase] = useState('settings'); // settings | generating | quiz | submitting | results
+  const [documentId, setDocumentId] = useState(() => {
+    const wanted = params.get('document');
+    return documents.some((d) => d._id === wanted) ? wanted : '';
+  });
   const [numQuestions, setNumQuestions] = useState(5);
   const [difficulty, setDifficulty] = useState('medium');
   const [focus, setFocus] = useState('');
@@ -48,7 +57,8 @@ const QuizPage = () => {
     setError(null);
     try {
       const res = await documentAPI.generateQuiz({
-        document_id: documentId,
+        projectId,
+        documentId: documentId || null,
         num_questions: numQuestions,
         difficulty,
         focus: focus.trim() || undefined,
@@ -84,7 +94,7 @@ const QuizPage = () => {
           userAnswer: r.user_answer,
           isCorrect: r.is_correct,
           explanation: r.explanation,
-          sourcePage: r.source_page,
+          source: sourceOf(r),
         })),
       });
       setPhase('results');
@@ -103,21 +113,22 @@ const QuizPage = () => {
     setQuizId(null);
   };
 
-  let body;
-  if (phase === 'generating') body = <PageLoader label="Writing questions from your document…" />;
-  else if (phase === 'submitting') body = <PageLoader label="Grading…" />;
-  else if (phase === 'results' && results) body = <QuizResults results={results} onRestart={restart} documentId={documentId} />;
-  else if (phase === 'settings') {
-    body = (
+  if (phase === 'generating') return <PageLoader label="Writing questions from your documents…" />;
+  if (phase === 'submitting') return <PageLoader label="Grading…" />;
+  if (phase === 'results' && results) return <QuizResults results={results} onRestart={restart} projectId={projectId} />;
+
+  if (phase === 'settings') {
+    return (
       <section className="card mx-auto max-w-xl">
         <div className="card-header">
           <div>
             <h2 className="card-title">New quiz</h2>
-            <p className="muted mt-0.5 text-xs">Every question comes from this document and notes its source page.</p>
+            <p className="muted mt-0.5 text-xs">Every question comes from your documents and notes which file and page it&apos;s from.</p>
           </div>
         </div>
         <div className="space-y-6 p-5">
           {error && <div className="alert alert-danger">{error}</div>}
+          {documents.length > 1 && <ScopePicker id="quiz-scope" label="Questions from" documents={documents} value={documentId} onChange={setDocumentId} />}
           <Segmented
             id="count-label"
             label="Questions"
@@ -148,52 +159,56 @@ const QuizPage = () => {
         </div>
       </section>
     );
-  } else {
-    const question = questions[current];
-    const isLast = current === questions.length - 1;
-    const answeredCount = Object.keys(answers).length;
-    body = (
-      <section className="card mx-auto max-w-2xl">
-        <div className="space-y-3 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">
-              Question {current + 1} <span className="muted font-normal">of {questions.length}</span>
-            </span>
-            <span className="muted inline-flex items-center gap-1.5 tabular-nums">
-              <Clock className="h-3.5 w-3.5" />
-              {formatTime(elapsed)}
-            </span>
-          </div>
-          <QuizProgress current={answeredCount} total={questions.length} />
-        </div>
-        <div className="px-6 py-6">
-          <QuizQuestion
-            question={question}
-            selectedAnswer={answers[current]}
-            onAnswerSelect={(answer) => setAnswers((prev) => ({ ...prev, [current]: answer }))}
-          />
-          {question.source_page && <p className="mt-4 text-xs text-zinc-400">Based on page {question.source_page}</p>}
-        </div>
-        <div className="flex items-center justify-between border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
-          <button type="button" onClick={() => setCurrent((c) => c - 1)} disabled={current === 0} className="btn btn-ghost">
-            <ArrowLeft className="h-4 w-4" />
-            Previous
-          </button>
-          <button
-            type="button"
-            onClick={() => (isLast ? submit() : setCurrent((c) => c + 1))}
-            disabled={!answers[current]}
-            className="btn btn-primary"
-          >
-            {isLast ? 'Submit answers' : 'Next'}
-            {!isLast && <ArrowRight className="h-4 w-4" />}
-          </button>
-        </div>
-      </section>
-    );
   }
 
-  return <DocumentLayout>{body}</DocumentLayout>;
+  const question = questions[current];
+  const isLast = current === questions.length - 1;
+  const answeredCount = Object.keys(answers).length;
+  const source = sourceOf(question);
+  return (
+    <section className="card mx-auto max-w-2xl">
+      <div className="space-y-3 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">
+            Question {current + 1} <span className="muted font-normal">of {questions.length}</span>
+          </span>
+          <span className="muted inline-flex items-center gap-1.5 tabular-nums">
+            <Clock className="h-3.5 w-3.5" />
+            {formatTime(elapsed)}
+          </span>
+        </div>
+        <QuizProgress current={answeredCount} total={questions.length} />
+      </div>
+      <div className="px-6 py-6">
+        <QuizQuestion
+          question={question}
+          selectedAnswer={answers[current]}
+          onAnswerSelect={(answer) => setAnswers((prev) => ({ ...prev, [current]: answer }))}
+        />
+        {source && <p className="mt-4 text-xs text-zinc-400">Based on {sourceLabel(source)}</p>}
+      </div>
+      <div className="flex items-center justify-between border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+        <button type="button" onClick={() => setCurrent((c) => c - 1)} disabled={current === 0} className="btn btn-ghost">
+          <ArrowLeft className="h-4 w-4" />
+          Previous
+        </button>
+        <button
+          type="button"
+          onClick={() => (isLast ? submit() : setCurrent((c) => c + 1))}
+          disabled={!answers[current]}
+          className="btn btn-primary"
+        >
+          {isLast ? 'Submit answers' : 'Next'}
+          {!isLast && <ArrowRight className="h-4 w-4" />}
+        </button>
+      </div>
+    </section>
+  );
+};
+
+const QuizPage = () => {
+  const { projectId } = useParams();
+  return <ProjectLayout>{({ documents }) => <Quiz projectId={projectId} documents={documents} />}</ProjectLayout>;
 };
 
 export default QuizPage;

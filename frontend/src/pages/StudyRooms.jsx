@@ -90,7 +90,7 @@ const StudyRooms = () => {
                   </div>
                   <p className="muted mt-0.5 truncate text-xs">
                     Hosted by {room.host_name}
-                    {room.document_name ? ` · ${room.document_name}` : ''} · {room.num_questions} questions · {room.time_per_question}s each ·{' '}
+                    {room.document_name || room.project_name ? ` · ${room.document_name || room.project_name}` : ''} · {room.num_questions} questions · {room.time_per_question}s each ·{' '}
                     <span className="capitalize">{room.difficulty}</span>
                   </p>
                 </div>

@@ -1,8 +1,13 @@
-"""Chunking and retrieval over a document's text.
+"""Chunking and retrieval over a project's documents.
 
-Chunks (with page numbers and optional embeddings) live in MongoDB, so nothing
-depends on local files. Retrieval is dense (fastembed, ONNX, no PyTorch) when
-the model is available and falls back to BM25 keyword scoring otherwise.
+Chunks (with page numbers, file names and optional embeddings) live in MongoDB,
+so nothing depends on local files. Retrieval is dense (fastembed, ONNX, no
+PyTorch) when the model is available and falls back to BM25 keyword scoring.
+
+A *scope* is {"project_id": str, "document_id": str | None}: the whole project,
+or one document inside it. Excerpts are labelled `[Doc N, Page P]`, where N is
+the document's position in the project (by upload order), and a legend maps
+N to the document id and file name so answers can cite real files.
 """
 from __future__ import annotations
 
@@ -108,7 +113,7 @@ def embeddings_status() -> dict:
 
 
 # --------------------------------------------------------------------------- indexing
-def index_document(document_id: str, text: str, pages: list[dict]) -> dict:
+def index_document(document_id: str, project_id: str, filename: str, text: str, pages: list[dict]) -> dict:
     cfg = current_app.config
     chunks = chunk_text(text, cfg["CHUNK_SIZE_CHARS"], cfg["CHUNK_OVERLAP_CHARS"])
     vectors = embed([c["text"] for c in chunks])
@@ -117,6 +122,8 @@ def index_document(document_id: str, text: str, pages: list[dict]) -> dict:
         rows.append(
             {
                 "document_id": document_id,
+                "project_id": project_id,
+                "filename": filename,
                 "index": index,
                 "text": chunk["text"],
                 "page": page_for_offset(pages, chunk["start"]),
@@ -132,6 +139,36 @@ def index_document(document_id: str, text: str, pages: list[dict]) -> dict:
 
 def delete_index(document_id: str) -> None:
     get_db()[Collections.CHUNKS].delete_many({"document_id": document_id})
+
+
+# --------------------------------------------------------------------------- scope helpers
+def _chunk_filter(scope: dict) -> dict:
+    query = {"project_id": scope["project_id"]}
+    if scope.get("document_id"):
+        query["document_id"] = scope["document_id"]
+    return query
+
+
+def legend_for(project_id: str) -> tuple[dict, dict]:
+    """Number the project's documents by upload order.
+
+    Returns (doc_id -> number, legend) where legend is {"1": {"document_id", "filename"}, ...}.
+    Numbers are stable for the whole project, whichever scope is being searched.
+    """
+    docs = get_db()[Collections.DOCUMENTS].find({"project_id": project_id}, {"filename": 1}).sort("uploaded_on", 1)
+    numbers, legend = {}, {}
+    for n, doc in enumerate(docs, start=1):
+        doc_id = str(doc["_id"])
+        numbers[doc_id] = n
+        legend[str(n)] = {"document_id": doc_id, "filename": doc.get("filename", f"Document {n}")}
+    return numbers, legend
+
+
+def _label(row: dict, numbers: dict) -> str:
+    n = numbers.get(row["document_id"], "?")
+    if row.get("page"):
+        return f"[Doc {n}, Page {row['page']}]"
+    return f"[Doc {n}]"
 
 
 # --------------------------------------------------------------------------- search
@@ -182,11 +219,9 @@ def _cosine(a: Iterable[float], b: Iterable[float]) -> float:
     return dot / math.sqrt(norm_a * norm_b)
 
 
-def search(document_id: str, query: str, top_k: int = 5) -> list[dict]:
-    """Return the most relevant chunks: [{text, page, index, score}]."""
-    rows = list(
-        get_db()[Collections.CHUNKS].find({"document_id": document_id}).sort("index", 1)
-    )
+def search(scope: dict, query: str, top_k: int = 5) -> list[dict]:
+    """Most relevant chunks in scope: [{text, page, index, document_id, filename, score}]."""
+    rows = list(get_db()[Collections.CHUNKS].find(_chunk_filter(scope)))
     if not rows:
         return []
     texts = [r["text"] for r in rows]
@@ -204,49 +239,71 @@ def search(document_id: str, query: str, top_k: int = 5) -> list[dict]:
     for i in ranked:
         if scores[i] <= 0 and len(results) >= 1:
             continue
+        row = rows[i]
         results.append(
             {
-                "text": rows[i]["text"],
-                "page": rows[i].get("page"),
-                "index": rows[i]["index"],
+                "text": row["text"],
+                "page": row.get("page"),
+                "index": row["index"],
+                "document_id": row["document_id"],
+                "filename": row.get("filename", ""),
                 "score": float(scores[i]),
             }
         )
     return results
 
 
-def context_for(document_id: str, query: str, max_chars: int = 6000, top_k: int = 6) -> tuple[str, list[int]]:
-    """Build a citation-friendly context block and return it with the pages used."""
-    hits = search(document_id, query, top_k=top_k)
-    blocks, pages, used = [], [], 0
+def context_for(scope: dict, query: str, max_chars: int = 6000, top_k: int = 6) -> tuple[str, dict, list[dict]]:
+    """Citation-friendly excerpts for a question.
+
+    Returns (context, legend, used) where `used` lists {doc, document_id, filename, page}
+    for each excerpt included.
+    """
+    numbers, legend = legend_for(scope["project_id"])
+    hits = search(scope, query, top_k=top_k)
+    blocks, used, total = [], [], 0
     for hit in hits:
-        label = f"[Page {hit['page']}]" if hit.get("page") else f"[Section {hit['index'] + 1}]"
-        block = f"{label}\n{hit['text']}"
-        if used + len(block) > max_chars:
+        block = f"{_label(hit, numbers)}\n{hit['text']}"
+        if total + len(block) > max_chars:
             break
         blocks.append(block)
-        used += len(block)
-        if hit.get("page") and hit["page"] not in pages:
-            pages.append(hit["page"])
-    return "\n\n".join(blocks), pages
+        total += len(block)
+        ref = {
+            "doc": numbers.get(hit["document_id"]),
+            "document_id": hit["document_id"],
+            "filename": hit["filename"],
+            "page": hit.get("page"),
+        }
+        if ref not in used:
+            used.append(ref)
+    return "\n\n".join(blocks), legend, used
 
 
-def spread_context(document_id: str, max_chars: int = 9000) -> str:
-    """Evenly sampled chunks across the whole document, for generation tasks."""
+def spread_context(scope: dict, max_chars: int = 9000) -> tuple[str, dict]:
+    """Excerpts sampled evenly across every document in scope, for generation tasks."""
+    numbers, legend = legend_for(scope["project_id"])
     rows = list(
-        get_db()[Collections.CHUNKS].find({"document_id": document_id}, {"text": 1, "page": 1, "index": 1}).sort("index", 1)
+        get_db()[Collections.CHUNKS].find(
+            _chunk_filter(scope), {"text": 1, "page": 1, "index": 1, "document_id": 1}
+        )
     )
     if not rows:
-        return ""
-    total = sum(len(r["text"]) for r in rows)
-    if total <= max_chars:
-        chosen = rows
-    else:
-        keep = max(1, int(len(rows) * max_chars / total))
-        step = len(rows) / keep
-        chosen = [rows[int(i * step)] for i in range(keep)]
+        return "", legend
+
+    by_doc: dict[str, list[dict]] = {}
+    for row in rows:
+        by_doc.setdefault(row["document_id"], []).append(row)
+    budget = max_chars // max(1, len(by_doc))  # each document gets a fair share
+
     blocks = []
-    for r in chosen:
-        label = f"[Page {r['page']}]" if r.get("page") else f"[Section {r['index'] + 1}]"
-        blocks.append(f"{label}\n{r['text']}")
-    return "\n\n".join(blocks)[:max_chars]
+    for doc_id in sorted(by_doc, key=lambda d: numbers.get(d, 0)):
+        doc_rows = sorted(by_doc[doc_id], key=lambda r: r["index"])
+        total = sum(len(r["text"]) for r in doc_rows)
+        if total <= budget:
+            chosen = doc_rows
+        else:
+            keep = max(1, int(len(doc_rows) * budget / total))
+            step = len(doc_rows) / keep
+            chosen = [doc_rows[int(i * step)] for i in range(keep)]
+        blocks.extend(f"{_label(r, numbers)}\n{r['text']}" for r in chosen)
+    return "\n\n".join(blocks)[:max_chars], legend

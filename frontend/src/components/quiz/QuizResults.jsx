@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, MessageSquareText, RotateCcw, X } from 'lucide-react';
+import { sourceLabel } from '../ui/RichText';
 
 const verdict = (pct) => {
   if (pct >= 90) return 'Excellent work';
@@ -35,7 +36,7 @@ const ScoreRing = ({ percentage }) => {
   );
 };
 
-const QuizResults = ({ results, onRestart, documentId }) => {
+const QuizResults = ({ results, onRestart, projectId }) => {
   const [filter, setFilter] = useState('all');
   const shown = results.questions.filter((q) => filter === 'all' || !q.isCorrect);
   const missed = results.questions.filter((q) => !q.isCorrect).length;
@@ -55,7 +56,7 @@ const QuizResults = ({ results, onRestart, documentId }) => {
               New quiz
             </button>
             {missed > 0 && (
-              <Link to={`/document/${documentId}/chat`} className="btn btn-secondary">
+              <Link to={`/projects/${projectId}/tutor`} className="btn btn-secondary">
                 <MessageSquareText className="h-4 w-4" />
                 Ask the tutor about mistakes
               </Link>
@@ -122,7 +123,7 @@ const QuizResults = ({ results, onRestart, documentId }) => {
                       )}
                     </dl>
                     {q.explanation && <p className="mt-3 text-zinc-600 dark:text-zinc-400">{q.explanation}</p>}
-                    {q.sourcePage && <span className="badge badge-neutral mt-3">Page {q.sourcePage}</span>}
+                    {q.source && <span className="badge badge-neutral mt-3">{sourceLabel(q.source)}</span>}
                   </div>
                 </li>
               );

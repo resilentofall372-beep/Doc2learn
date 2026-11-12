@@ -1,17 +1,19 @@
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, g, jsonify, request
 
+from ..access import resolve_scope
 from ..auth import require_auth
 from ..extensions import Collections, get_db
-from .documents import owned_document
 
 bp = Blueprint("flashcards", __name__)
 
 
-@bp.get("/document/<document_id>")
+@bp.get("/")
 @require_auth
-def latest(document_id):
-    owned_document(document_id, {"_id": 1})
+def latest():
+    """Latest deck for ?project_id=...&document_id=... (no document_id = whole project)."""
+    scope = resolve_scope(request.args)
     row = get_db()[Collections.FLASHCARDS].find_one(
-        {"document_id": document_id, "user_id": g.user_id}, sort=[("created_at", -1)]
+        {"project_id": scope["project_id"], "document_id": scope["document_id"], "user_id": g.user_id},
+        sort=[("created_at", -1)],
     )
     return jsonify({"success": True, "flashcards": row["flashcards"] if row else []})

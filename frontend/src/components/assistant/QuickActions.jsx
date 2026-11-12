@@ -2,23 +2,25 @@ import React, { useState } from 'react';
 import { CalendarDays, ChevronRight, FileText, Lightbulb, PenLine, X } from 'lucide-react';
 import { assistantAPI, errorMessage } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
-import RichText from '../ui/RichText';
+import RichText, { sourceLabel } from '../ui/RichText';
+import ScopePicker from '../projects/ScopePicker';
 
 const TOOLS = [
   { id: 'summarize', name: 'Summary', description: 'Overview and key points', icon: FileText },
   { id: 'explain', name: 'Explain a concept', description: 'Definition, example, common mistake', icon: Lightbulb, prompt: 'Concept to explain', placeholder: 'e.g. photosynthesis' },
-  { id: 'practice', name: 'Practice problems', description: 'Open questions with hints', icon: PenLine, prompt: 'Topic', placeholder: 'e.g. chapter 2, or leave blank' , optional: true },
+  { id: 'practice', name: 'Practice problems', description: 'Open questions with hints', icon: PenLine, prompt: 'Topic', placeholder: 'e.g. chapter 2, or leave blank', optional: true },
   { id: 'study-plan', name: 'Study plan', description: 'Seven days, weighted to weak spots', icon: CalendarDays, prompt: 'Topics you find hard', placeholder: 'Comma separated, optional', optional: true },
 ];
 
-const Sources = ({ pages }) =>
-  pages?.length ? <p className="muted mt-3 text-xs">Sources: {pages.map((p) => `p. ${p}`).join(', ')}</p> : null;
+const Sources = ({ sources }) =>
+  sources?.length ? <p className="muted mt-3 text-xs">Sources: {sources.map(sourceLabel).join('; ')}</p> : null;
 
 const Result = ({ result }) => {
+  const legend = result.data.legend;
   if (result.type === 'summarize') {
     return (
       <>
-        <RichText text={result.data.summary} className="text-sm text-zinc-700 dark:text-zinc-300" />
+        <RichText text={result.data.summary} legend={legend} className="text-sm text-zinc-700 dark:text-zinc-300" />
         {result.data.key_points?.length > 0 && (
           <>
             <p className="eyebrow mt-4">Key points</p>
@@ -33,8 +35,8 @@ const Result = ({ result }) => {
   if (result.type === 'explain') {
     return (
       <>
-        <RichText text={result.data.explanation} className="text-sm text-zinc-700 dark:text-zinc-300" />
-        <Sources pages={result.data.sources} />
+        <RichText text={result.data.explanation} legend={legend} className="text-sm text-zinc-700 dark:text-zinc-300" />
+        <Sources sources={result.data.sources} />
       </>
     );
   }
@@ -77,9 +79,11 @@ const Result = ({ result }) => {
   return null;
 };
 
-const QuickActions = ({ documentId }) => {
+/** Study tools for a project. Each one can cover the whole project or a single document. */
+const QuickActions = ({ projectId, documents }) => {
   const [active, setActive] = useState(null);
   const [draft, setDraft] = useState('');
+  const [documentId, setDocumentId] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -88,13 +92,14 @@ const QuickActions = ({ documentId }) => {
     setLoading(true);
     setResult(null);
     setError(null);
+    const docId = documentId || null;
     try {
       let res;
-      if (tool.id === 'summarize') res = await assistantAPI.summarizeDocument(documentId, 'brief');
-      if (tool.id === 'explain') res = await assistantAPI.explainConcept(documentId, value);
-      if (tool.id === 'practice') res = await assistantAPI.generatePractice(documentId, value || 'general', 5);
+      if (tool.id === 'summarize') res = await assistantAPI.summarize(projectId, docId, 'brief');
+      if (tool.id === 'explain') res = await assistantAPI.explainConcept(projectId, docId, value);
+      if (tool.id === 'practice') res = await assistantAPI.generatePractice(projectId, docId, value || 'general', 5);
       if (tool.id === 'study-plan') {
-        res = await assistantAPI.createStudyPlan(documentId, value.split(',').map((a) => a.trim()).filter(Boolean), 7);
+        res = await assistantAPI.createStudyPlan(projectId, docId, value.split(',').map((a) => a.trim()).filter(Boolean), 7);
       }
       setResult({ type: tool.id, title: tool.name, data: res.data });
     } catch (err) {
@@ -114,6 +119,11 @@ const QuickActions = ({ documentId }) => {
         <div className="card-header py-3">
           <h2 className="card-title">Study tools</h2>
         </div>
+        {documents.length > 1 && (
+          <div className="border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+            <ScopePicker id="tools-scope" label="Use" documents={documents} value={documentId} onChange={setDocumentId} />
+          </div>
+        )}
         <ul className="p-2">
           {TOOLS.map((tool) => {
             const Icon = tool.icon;
@@ -179,7 +189,7 @@ const QuickActions = ({ documentId }) => {
             )}
           </div>
           <div className="max-h-[28rem] overflow-y-auto p-5">
-            {loading && <LoadingSpinner size="small" label="Reading your document" className="justify-start" />}
+            {loading && <LoadingSpinner size="small" label="Reading your documents" className="justify-start" />}
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
             {result && <Result result={result} />}
           </div>

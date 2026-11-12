@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { documentAPI, errorMessage, roomAPI } from '../services/api';
+import { errorMessage, projectAPI, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
 import { useApp } from '../contexts/AppContext';
-import DocumentUpload from '../components/document/DocumentUpload';
+import ScopePicker from '../components/projects/ScopePicker';
 import Segmented from '../components/ui/Segmented';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 
@@ -23,10 +23,11 @@ const CreateQuizRoom = () => {
   const [params] = useSearchParams();
   const { addNotification } = useApp();
 
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [projectId, setProjectId] = useState(params.get('project') || '');
   const [documents, setDocuments] = useState([]);
-  const [loadingDocs, setLoadingDocs] = useState(true);
   const [documentId, setDocumentId] = useState(params.get('document') || '');
-  const [showUpload, setShowUpload] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [numQuestions, setNumQuestions] = useState(10);
   const [timePerQuestion, setTimePerQuestion] = useState(30);
@@ -36,23 +37,40 @@ const CreateQuizRoom = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    documentAPI
-      .getDocuments()
-      .then((res) => setDocuments(res.data.documents || []))
-      .catch(() => setDocuments([]))
-      .finally(() => setLoadingDocs(false));
+    projectAPI
+      .list()
+      .then((res) => setProjects((res.data.projects || []).filter((p) => p.document_count > 0)))
+      .catch(() => setProjects([]))
+      .finally(() => setLoadingProjects(false));
   }, []);
+
+  // Load the chosen project's documents for the optional "one document" picker.
+  useEffect(() => {
+    if (!projectId) {
+      setDocuments([]);
+      return;
+    }
+    projectAPI
+      .get(projectId)
+      .then((res) => {
+        const docs = res.data.documents || [];
+        setDocuments(docs);
+        setDocumentId((current) => (docs.some((d) => d._id === current) ? current : ''));
+      })
+      .catch(() => setDocuments([]));
+  }, [projectId]);
 
   const create = async (e) => {
     e.preventDefault();
     if (!roomName.trim()) return setError('Give the quiz a name.');
-    if (!documentId) return setError('Choose the document the questions should come from.');
+    if (!projectId) return setError('Choose the project the questions should come from.');
     setError(null);
     setCreating(true);
     try {
       const res = await roomAPI.create({
         room_name: roomName.trim(),
-        document_id: documentId,
+        project_id: projectId,
+        ...(documentId ? { document_id: documentId } : {}),
         num_questions: numQuestions,
         time_per_question: timePerQuestion,
         difficulty,
@@ -91,36 +109,33 @@ const CreateQuizRoom = () => {
             <input id="room-name" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="Friday biology revision" maxLength={60} className="input" />
           </div>
           <div>
-            <label htmlFor="document" className="label">Source document</label>
-            {loadingDocs ? (
+            <label htmlFor="project" className="label">Project</label>
+            {loadingProjects ? (
               <LoadingSpinner size="small" className="justify-start" />
+            ) : projects.length === 0 ? (
+              <p className="muted text-sm">
+                You need a project with at least one document first.{' '}
+                <Link to="/projects" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400">
+                  Go to projects
+                </Link>
+              </p>
             ) : (
-              <select id="document" value={documentId} onChange={(e) => setDocumentId(e.target.value)} className="input">
-                <option value="">Choose a document</option>
-                {documents.map((doc) => (
-                  <option key={doc._id} value={doc._id}>{doc.filename}</option>
+              <select id="project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className="input">
+                <option value="">Choose a project</option>
+                {projects.map((p) => (
+                  <option key={p._id} value={p._id}>
+                    {p.name} ({p.document_count} {p.document_count === 1 ? 'document' : 'documents'})
+                  </option>
                 ))}
               </select>
             )}
-            <button type="button" onClick={() => setShowUpload((v) => !v)} className="mt-2 text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400">
-              {showUpload ? 'Hide upload' : 'Or upload a new document'}
-            </button>
-            {showUpload && (
-              <div className="mt-3">
-                <DocumentUpload
-                  compact
-                  onUpload={(doc) => {
-                    setDocuments((prev) => [doc, ...prev]);
-                    setDocumentId(doc._id);
-                    setShowUpload(false);
-                  }}
-                />
-              </div>
-            )}
           </div>
+          {documents.length > 1 && (
+            <ScopePicker id="room-scope" label="Questions from" documents={documents} value={documentId} onChange={setDocumentId} />
+          )}
         </Section>
 
-        <Section title="Questions" description="Generated from the document when you open the lobby.">
+        <Section title="Questions" description="Generated from your documents when you open the lobby.">
           <div>
             <div className="mb-1.5 flex justify-between text-sm">
               <label htmlFor="num-questions" className="font-medium text-zinc-700 dark:text-zinc-300">Number of questions</label>
@@ -160,7 +175,7 @@ const CreateQuizRoom = () => {
 
         <div className="flex justify-end gap-2 bg-zinc-50 px-5 py-4 dark:bg-zinc-900/60">
           <Link to="/study-rooms" className="btn btn-ghost">Cancel</Link>
-          <button type="submit" disabled={creating} className="btn btn-primary">
+          <button type="submit" disabled={creating || projects.length === 0} className="btn btn-primary">
             {creating ? <LoadingSpinner size="small" /> : null}
             Create quiz
           </button>

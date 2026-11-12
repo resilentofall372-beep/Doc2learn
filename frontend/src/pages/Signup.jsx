@@ -37,7 +37,7 @@ const Signup = () => {
     setLoading(true);
     const result = await signup({ name: form.name, email: form.email, password: form.password });
     setLoading(false);
-    if (result.success) navigate('/dashboard');
+    if (result.success) navigate('/projects');
     else setFormError(result.error);
   };
 

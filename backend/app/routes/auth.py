@@ -46,6 +46,7 @@ def register():
         "name": name,
         "email": email,
         "password_hash": hash_password(password),
+        "token_version": 0,
         "created_at": datetime.now(timezone.utc),
     }
     try:
@@ -53,7 +54,7 @@ def register():
     except DuplicateKeyError:
         raise ApiError("An account with this email already exists", 409)
     user["_id"] = result.inserted_id
-    return jsonify({"success": True, "token": issue_token(str(result.inserted_id)), "user": public_user(user)}), 201
+    return jsonify({"success": True, "token": issue_token(user), "user": public_user(user)}), 201
 
 
 @bp.post("/login")
@@ -63,7 +64,15 @@ def login():
     user = get_db()[Collections.USERS].find_one({"email": email})
     if not user or not verify_password(password, user.get("password_hash", "")):
         raise ApiError("Incorrect email or password", 401)
-    return jsonify({"success": True, "token": issue_token(str(user["_id"])), "user": public_user(user)})
+    return jsonify({"success": True, "token": issue_token(user), "user": public_user(user)})
+
+
+@bp.post("/logout")
+@require_auth
+def logout():
+    """Revoke every token for this user (all devices) by bumping token_version."""
+    get_db()[Collections.USERS].update_one({"_id": g.user["_id"]}, {"$inc": {"token_version": 1}})
+    return jsonify({"success": True})
 
 
 @bp.get("/me")
