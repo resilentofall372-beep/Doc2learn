@@ -28,12 +28,16 @@ class Config:
     PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
 
     # LLM access goes through OpenRouter (OpenAI-compatible API).
-    OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
-    OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    # LLM_* names are preferred; the OPENROUTER_* names still work as a fallback.
+    LLM_API_KEY = os.environ.get("LLM_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
+    LLM_BASE_URL = os.environ.get("LLM_BASE_URL") or os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     LLM_MODEL = os.environ.get("LLM_MODEL", "openai/gpt-4o-mini")
     LLM_TEMPERATURE = float(os.environ.get("LLM_TEMPERATURE", "0.4"))
     LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "2500"))
-    LLM_TIMEOUT_SECONDS = int(os.environ.get("LLM_TIMEOUT_SECONDS", "90"))
+    # Tried in order when the main model is overloaded, slow, retired or returns nothing.
+    LLM_FALLBACK_MODELS = _csv(os.environ.get("LLM_FALLBACK_MODELS", ""))
+    # Per-model timeout; kept short so a stuck model falls through to the next one quickly.
+    LLM_TIMEOUT_SECONDS = int(os.environ.get("LLM_TIMEOUT_SECONDS", "45"))
 
     # Retrieval
     EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
@@ -51,4 +55,4 @@ class TestConfig(Config):
     TESTING = True
     SECRET_KEY = "test-secret"
     EMBEDDINGS_ENABLED = False
-    OPENROUTER_API_KEY = "test-key"
+    LLM_API_KEY = "test-key"

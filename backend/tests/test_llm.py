@@ -17,7 +17,7 @@ def test_missing_key_gives_clear_503(client, auth, app, monkeypatch):
     from app.services import llm
 
     monkeypatch.setattr(generation, "complete_json", lambda *a, **k: llm.complete_json(*a, **k))
-    app.config["OPENROUTER_API_KEY"] = ""
+    app.config["LLM_API_KEY"] = ""
     headers, _ = auth()
     import io
 
@@ -29,4 +29,41 @@ def test_missing_key_gives_clear_503(client, auth, app, monkeypatch):
     ).get_json()
     res = client.post("/api/document/generate-quiz", json={"document_id": doc["document_id"]}, headers=headers)
     assert res.status_code == 503
-    assert "OPENROUTER_API_KEY" in res.get_json()["error"]
+    assert "LLM_API_KEY" in res.get_json()["error"]
+
+
+def test_falls_back_to_next_model(app, monkeypatch):
+    from app.services import llm
+
+    app.config["LLM_MODEL"] = "busy-model"
+    app.config["LLM_FALLBACK_MODELS"] = ["empty-model", "good-model"]
+    calls = []
+
+    def fake_once(model, *args):
+        calls.append(model)
+        if model == "busy-model":
+            raise llm._Retryable("Model busy-model is unavailable right now (HTTP 503).")
+        if model == "empty-model":
+            return ""
+        return "answer from good-model"
+
+    monkeypatch.setattr(llm, "_complete_once", fake_once)
+    with app.app_context():
+        assert llm.complete([{"role": "user", "content": "hi"}]) == "answer from good-model"
+    assert calls == ["busy-model", "empty-model", "good-model"]
+
+
+def test_all_models_failing_gives_clear_error(app, monkeypatch):
+    from app.services import llm
+
+    app.config["LLM_MODEL"] = "a"
+    app.config["LLM_FALLBACK_MODELS"] = ["b"]
+
+    def always_busy(model, *args):
+        raise llm._Retryable(f"Model {model} is unavailable right now (HTTP 503).")
+
+    monkeypatch.setattr(llm, "_complete_once", always_busy)
+    with app.app_context():
+        with pytest.raises(llm.LLMUnavailable) as err:
+            llm.complete([{"role": "user", "content": "hi"}])
+    assert "All configured models were tried" in err.value.message

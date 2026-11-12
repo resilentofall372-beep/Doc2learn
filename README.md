@@ -48,13 +48,13 @@ React (Vite, Tailwind)  ──/api──▶  Flask API  ──▶  MongoDB
 You need Docker and an [OpenRouter API key](https://openrouter.ai/keys).
 
 ```bash
-cp .env.example .env          # then put your key in OPENROUTER_API_KEY
+cp .env.example .env          # then put your key in LLM_API_KEY
 docker compose up --build
 ```
 
 Open http://localhost:8080. MongoDB runs in a container, so nothing else needs installing.
 
-To use a different model, set `LLM_MODEL` in `.env` to any OpenRouter model id, such as `anthropic/claude-3.5-haiku` or `google/gemini-2.0-flash-001`.
+To use a different model, set `LLM_MODEL` in `.env` to any OpenRouter model id, such as `anthropic/claude-3.5-haiku` or `google/gemini-3.1-flash-lite-001`.
 
 ### Live quizzes with phones and laptops on your Wi-Fi
 
@@ -74,7 +74,7 @@ Restart with `docker compose up --build`. The lobby's invite link and "players j
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env          # set OPENROUTER_API_KEY and MONGO_URI
+cp .env.example .env          # set LLM_API_KEY and MONGO_URI
 python run.py                 # http://localhost:5000/api/health
 
 # Frontend, in another terminal

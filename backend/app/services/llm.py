@@ -27,18 +27,18 @@ class LLMUnavailable(ApiError):
 
 def _client() -> OpenAI:
     cfg = current_app.config
-    key = cfg["OPENROUTER_API_KEY"]
+    key = cfg["LLM_API_KEY"]
     if not key:
         raise LLMUnavailable(
-            "No model provider configured. Set OPENROUTER_API_KEY in backend/.env."
+            "No model provider configured. Set LLM_API_KEY in .env."
         )
-    cache_key = f"{cfg['OPENROUTER_BASE_URL']}|{key[-6:]}"
+    cache_key = f"{cfg['LLM_BASE_URL']}|{key[-6:]}"
     if cache_key not in _client_cache:
         _client_cache[cache_key] = OpenAI(
             api_key=key,
-            base_url=cfg["OPENROUTER_BASE_URL"],
+            base_url=cfg["LLM_BASE_URL"],
             timeout=cfg["LLM_TIMEOUT_SECONDS"],
-            max_retries=1,
+            max_retries=0,  # we fall back to another model instead
             default_headers={
                 # OpenRouter uses these for attribution on its dashboard; both optional.
                 "HTTP-Referer": "https://github.com/Utkarshjain1217/Doc2learn",
@@ -51,9 +51,10 @@ def _client() -> OpenAI:
 def llm_status() -> dict:
     cfg = current_app.config
     return {
-        "provider": "openrouter",
+        "provider": re.sub(r"^https?://([^/]+).*", r"\1", cfg["LLM_BASE_URL"]),
         "model": cfg["LLM_MODEL"],
-        "configured": bool(cfg["OPENROUTER_API_KEY"]),
+        "fallback_models": cfg["LLM_FALLBACK_MODELS"],
+        "configured": bool(cfg["LLM_API_KEY"]),
     }
 
 
@@ -70,8 +71,39 @@ def complete(
     message instead of silently degrading.
     """
     cfg = current_app.config
+    models = [cfg["LLM_MODEL"]] + [m for m in cfg["LLM_FALLBACK_MODELS"] if m != cfg["LLM_MODEL"]]
+    last_problem = "The model provider did not respond."
+
+    # Try each model in turn; move on when one is overloaded, slow, retired or returns nothing.
+    for model in models:
+        try:
+            content = _complete_once(model, messages, temperature, max_tokens, json_mode)
+        except _Retryable as exc:
+            last_problem = exc.message
+            log.warning("LLM model %s unavailable (%s); trying next", model, exc.message)
+            continue
+        if content.strip():
+            return content.strip()
+        last_problem = "The model returned an empty response."
+        log.warning("LLM model %s returned an empty response; trying next", model)
+
+    raise LLMUnavailable(f"{last_problem} All configured models were tried; please try again shortly.")
+
+
+class _Retryable(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = message
+
+
+# Status codes worth retrying on another model: retired/unknown model, rate limit, overload.
+_FALLBACK_STATUSES = {404, 408, 429, 500, 502, 503, 504}
+
+
+def _complete_once(model, messages, temperature, max_tokens, json_mode) -> str:
+    cfg = current_app.config
     kwargs: dict[str, Any] = {
-        "model": cfg["LLM_MODEL"],
+        "model": model,
         "messages": messages,
         "temperature": cfg["LLM_TEMPERATURE"] if temperature is None else temperature,
         "max_tokens": max_tokens or cfg["LLM_MAX_TOKENS"],
@@ -83,26 +115,25 @@ def complete(
         try:
             response = _client().chat.completions.create(**kwargs)
         except APIError as exc:
-            # Some OpenRouter models reject response_format; retry without it.
-            if json_mode and getattr(exc, "status_code", None) in (400, 404, 422):
+            # Some models reject response_format; retry once without it.
+            if json_mode and getattr(exc, "status_code", None) in (400, 422):
                 kwargs.pop("response_format", None)
                 response = _client().chat.completions.create(**kwargs)
             else:
                 raise
-    except RateLimitError as exc:
-        log.warning("LLM rate limited: %s", exc)
-        raise LLMUnavailable("The model provider is rate limiting requests. Try again shortly.")
+    except RateLimitError:
+        raise _Retryable("The model provider is rate limiting requests.")
     except APITimeoutError:
-        raise LLMUnavailable("The model took too long to respond. Try again.")
+        raise _Retryable("The model took too long to respond.")
     except APIError as exc:
+        status = getattr(exc, "status_code", None)
+        if status in _FALLBACK_STATUSES:
+            raise _Retryable(f"Model {model} is unavailable right now (HTTP {status}).")
         log.error("LLM request failed: %s", exc)
         raise LLMUnavailable(f"Model request failed: {getattr(exc, 'message', str(exc))[:200]}")
 
     choice = response.choices[0] if response.choices else None
-    content = (choice.message.content if choice and choice.message else "") or ""
-    if not content.strip():
-        raise LLMUnavailable("The model returned an empty response.")
-    return content.strip()
+    return (choice.message.content if choice and choice.message else "") or ""
 
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
