@@ -24,6 +24,9 @@ class Config:
         )
     )
 
+    # Address other devices use to reach the app (for quiz invite links). Optional.
+    PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
+
     # LLM access goes through OpenRouter (OpenAI-compatible API).
     OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
     OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")

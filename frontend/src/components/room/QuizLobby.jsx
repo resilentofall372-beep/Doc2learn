@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, Copy, Crown, Play, RefreshCw, Sparkles } from 'lucide-react';
-import { documentAPI, errorMessage } from '../../services/api';
+import { documentAPI, errorMessage, healthAPI } from '../../services/api';
 import Avatar from '../ui/Avatar';
 import LoadingSpinner from '../common/LoadingSpinner';
 
@@ -9,6 +9,20 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
   const [questions, setQuestions] = useState([]);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  // Prefer the configured network address so invite links work on other devices,
+  // even when the host opened the app at localhost.
+  const [baseUrl, setBaseUrl] = useState(window.location.origin);
+
+  useEffect(() => {
+    healthAPI
+      .get()
+      .then((res) => res.data.public_url && setBaseUrl(res.data.public_url))
+      .catch(() => {});
+  }, []);
+
+  const inviteUrl = `${baseUrl}/join/${room.room_code}`;
+  const displayUrl = inviteUrl.replace(/^https?:\/\//, '');
+  const onLocalhost = /^(localhost|127\.)/.test(new URL(baseUrl).hostname);
 
   const generate = async () => {
     setError(null);
@@ -29,7 +43,7 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
 
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/join/${room.room_code}`);
+      await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -47,8 +61,14 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
           <p className="eyebrow">Room code</p>
           <p className="mt-4 font-mono text-5xl font-semibold tracking-[0.25em] text-zinc-900 dark:text-zinc-50 sm:text-6xl">{room.room_code}</p>
           <p className="muted mt-3 text-sm">
-            Players join at <span className="font-medium text-zinc-700 dark:text-zinc-300">{window.location.host}/join/{room.room_code}</span>
+            Players join at <span className="font-medium text-zinc-700 dark:text-zinc-300">{displayUrl}</span>
           </p>
+          {onLocalhost && isHost && (
+            <p className="mx-auto mt-2 max-w-md text-xs text-amber-700 dark:text-amber-400">
+              This address only works on this computer. To invite phones or laptops on your Wi-Fi, set PUBLIC_URL and
+              CORS_ORIGINS in .env (see the README).
+            </p>
+          )}
           <button type="button" onClick={copyLink} className="btn btn-secondary btn-sm mt-5">
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? 'Link copied' : 'Copy invite link'}

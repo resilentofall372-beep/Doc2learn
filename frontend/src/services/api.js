@@ -88,6 +88,10 @@ export const assistantAPI = {
   clearChat: (sessionId) => api.post('/assistant/chat/clear', { session_id: sessionId }),
 };
 
+export const healthAPI = {
+  get: () => api.get('/health'),
+};
+
 export const statsAPI = {
   me: () => api.get('/stats/me'),
 };

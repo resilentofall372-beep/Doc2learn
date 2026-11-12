@@ -73,6 +73,7 @@ def create_app(config: type[Config] | None = None, db=None) -> Flask:
                 "status": "ok",
                 "database": db_ping(),
                 "llm": llm_status(),
+                "public_url": app.config["PUBLIC_URL"] or None,
             }
         )
 

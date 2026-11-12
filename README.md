@@ -56,6 +56,17 @@ Open http://localhost:8080. MongoDB runs in a container, so nothing else needs i
 
 To use a different model, set `LLM_MODEL` in `.env` to any OpenRouter model id, such as `anthropic/claude-3.5-haiku` or `google/gemini-2.0-flash-001`.
 
+### Live quizzes with phones and laptops on your Wi-Fi
+
+Other devices reach the app through your computer's network address. Find it with `hostname -I` (the first address, e.g. `192.168.1.9`), then add it to `.env`:
+
+```bash
+CORS_ORIGINS=http://localhost:8080,http://localhost:5173,http://192.168.1.9:8080
+PUBLIC_URL=http://192.168.1.9:8080
+```
+
+Restart with `docker compose up --build`. The lobby's invite link and "players join at" address now use `PUBLIC_URL`, and players open it on their own devices. If your router gives your computer a new address later, update both lines.
+
 ### Without Docker (development)
 
 ```bash
