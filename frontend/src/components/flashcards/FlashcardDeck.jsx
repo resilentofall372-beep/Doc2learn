@@ -1,84 +1,146 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, RotateCcw, Shuffle } from 'lucide-react';
 import Flashcard from './Flashcard';
-import FlashcardControls from './FlashcardControls';
 
 const FlashcardDeck = ({ flashcards }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [order, setOrder] = useState(() => flashcards.map((_, i) => i));
+  const [position, setPosition] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [knownCards, setKnownCards] = useState(new Set());
+  const [known, setKnown] = useState(() => new Set());
+  const [onlyLearning, setOnlyLearning] = useState(false);
 
-  const currentCard = flashcards[currentIndex];
-
-  const handleNext = () => {
+  useEffect(() => {
+    setOrder(flashcards.map((_, i) => i));
+    setPosition(0);
+    setKnown(new Set());
     setShowAnswer(false);
-    setCurrentIndex(prev => (prev + 1) % flashcards.length);
-  };
+  }, [flashcards]);
 
-  const handlePrevious = () => {
+  const deck = useMemo(() => (onlyLearning ? order.filter((i) => !known.has(i)) : order), [order, known, onlyLearning]);
+  const index = deck[Math.min(position, deck.length - 1)];
+  const card = flashcards[index];
+
+  const go = useCallback(
+    (delta) => {
+      if (!deck.length) return;
+      setShowAnswer(false);
+      setPosition((p) => (p + delta + deck.length) % deck.length);
+    },
+    [deck.length]
+  );
+
+  const mark = useCallback(
+    (isKnown) => {
+      setKnown((prev) => {
+        const next = new Set(prev);
+        if (isKnown) next.add(index);
+        else next.delete(index);
+        return next;
+      });
+      if (!onlyLearning || !isKnown) go(1);
+      else setShowAnswer(false);
+    },
+    [index, go, onlyLearning]
+  );
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (e.key === ' ') {
+        e.preventDefault();
+        setShowAnswer((s) => !s);
+      } else if (e.key === 'ArrowRight') go(1);
+      else if (e.key === 'ArrowLeft') go(-1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [go]);
+
+  const shuffle = () => {
+    setOrder((prev) => [...prev].sort(() => Math.random() - 0.5));
+    setPosition(0);
     setShowAnswer(false);
-    setCurrentIndex(prev => (prev - 1 + flashcards.length) % flashcards.length);
   };
 
-  const handleMarkKnown = () => {
-    setKnownCards(prev => new Set(prev).add(currentCard.id));
-    handleNext();
-  };
-
-  const handleReset = () => {
-    setKnownCards(new Set());
-    setCurrentIndex(0);
+  const reset = () => {
+    setKnown(new Set());
+    setOnlyLearning(false);
+    setPosition(0);
     setShowAnswer(false);
   };
 
-  const progress = {
-    current: currentIndex + 1,
-    total: flashcards.length,
-    known: knownCards.size
-  };
-
-  if (!currentCard) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">No flashcards available.</p>
-      </div>
-    );
-  }
+  const progress = flashcards.length ? (known.size / flashcards.length) * 100 : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Progress */}
-      <div className="text-center">
-        <div className="flex justify-between items-center mb-2 text-sm text-gray-600">
-          <span>Card {progress.current} of {progress.total}</span>
-          <span>{progress.known} marked as known</span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div
-            className="bg-primary-600 h-2 rounded-full transition-all"
-            style={{ width: `${(progress.current / progress.total) * 100}%` }}
-          ></div>
+    <div className="mx-auto max-w-2xl">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <span className="font-medium tabular-nums">
+          {deck.length ? Math.min(position, deck.length - 1) + 1 : 0}
+          <span className="muted font-normal"> / {deck.length}</span>
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setOnlyLearning((v) => !v);
+              setPosition(0);
+              setShowAnswer(false);
+            }}
+            className={`btn btn-sm ${onlyLearning ? 'btn-secondary' : 'btn-ghost'}`}
+          >
+            {onlyLearning ? 'Showing cards to learn' : 'Show only cards to learn'}
+          </button>
+          <button type="button" onClick={shuffle} className="btn btn-ghost btn-icon" title="Shuffle" aria-label="Shuffle">
+            <Shuffle className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={reset} className="btn btn-ghost btn-icon" title="Reset progress" aria-label="Reset progress">
+            <RotateCcw className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
-      {/* Flashcard */}
-      <Flashcard
-        card={currentCard}
-        showAnswer={showAnswer}
-        onFlip={() => setShowAnswer(!showAnswer)}
-        isKnown={knownCards.has(currentCard.id)}
-      />
+      {card ? (
+        <Flashcard card={card} showAnswer={showAnswer} onFlip={() => setShowAnswer((s) => !s)} />
+      ) : (
+        <div className="card grid h-72 place-items-center p-8 text-center">
+          <div>
+            <p className="text-lg font-semibold">You know every card</p>
+            <p className="muted mt-1 text-sm">Reset to go through the deck again.</p>
+            <button type="button" onClick={reset} className="btn btn-secondary mt-4">Reset deck</button>
+          </div>
+        </div>
+      )}
 
-      {/* Controls */}
-      <FlashcardControls
-        onPrevious={handlePrevious}
-        onNext={handleNext}
-        onMarkKnown={handleMarkKnown}
-        onReset={handleReset}
-        showAnswer={showAnswer}
-        hasPrevious={currentIndex > 0}
-        hasNext={currentIndex < flashcards.length - 1}
-        allKnown={knownCards.size === flashcards.length}
-      />
+      {card && (
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <button type="button" onClick={() => go(-1)} className="btn btn-secondary btn-icon" aria-label="Previous card">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => mark(false)} className="btn btn-secondary">Still learning</button>
+            <button type="button" onClick={() => mark(true)} className="btn btn-primary">
+              <Check className="h-4 w-4" />
+              I knew this
+            </button>
+          </div>
+          <button type="button" onClick={() => go(1)} className="btn btn-secondary btn-icon" aria-label="Next card">
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="mt-8">
+        <div className="mb-2 flex justify-between text-xs">
+          <span className="muted">Mastered</span>
+          <span className="font-medium tabular-nums">
+            {known.size} of {flashcards.length}
+          </span>
+        </div>
+        <div className="progress-track">
+          <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-300" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="muted mt-4 text-center text-xs">Space to flip · ← → to move between cards</p>
+      </div>
     </div>
   );
 };

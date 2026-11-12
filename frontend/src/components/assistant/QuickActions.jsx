@@ -1,37 +1,104 @@
 import React, { useState } from 'react';
+import { CalendarDays, ChevronRight, FileText, Lightbulb, PenLine, X } from 'lucide-react';
 import { assistantAPI, errorMessage } from '../../services/api';
+import LoadingSpinner from '../common/LoadingSpinner';
+import RichText from '../ui/RichText';
 
-const ACTIONS = [
-  { id: 'summarize', name: 'Summarize', icon: '📝', description: 'Brief overview and key points', color: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200' },
-  { id: 'explain', name: 'Explain a concept', icon: '💡', description: 'Definition, example, misconception', color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200', input: 'Which concept?' },
-  { id: 'practice', name: 'Practice problems', icon: '✍️', description: 'Open questions with hints', color: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200', input: 'Topic (or "general")' },
-  { id: 'study-plan', name: 'Study plan', icon: '📅', description: 'A week, weighted to weak spots', color: 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-200', input: 'Weak areas, comma separated' },
+const TOOLS = [
+  { id: 'summarize', name: 'Summary', description: 'Overview and key points', icon: FileText },
+  { id: 'explain', name: 'Explain a concept', description: 'Definition, example, common mistake', icon: Lightbulb, prompt: 'Concept to explain', placeholder: 'e.g. photosynthesis' },
+  { id: 'practice', name: 'Practice problems', description: 'Open questions with hints', icon: PenLine, prompt: 'Topic', placeholder: 'e.g. chapter 2, or leave blank' , optional: true },
+  { id: 'study-plan', name: 'Study plan', description: 'Seven days, weighted to weak spots', icon: CalendarDays, prompt: 'Topics you find hard', placeholder: 'Comma separated, optional', optional: true },
 ];
 
-const Pages = ({ pages }) =>
-  pages?.length ? <p className="mt-2 text-xs opacity-70">Sources: {pages.map((p) => `p. ${p}`).join(', ')}</p> : null;
+const Sources = ({ pages }) =>
+  pages?.length ? <p className="muted mt-3 text-xs">Sources: {pages.map((p) => `p. ${p}`).join(', ')}</p> : null;
+
+const Result = ({ result }) => {
+  if (result.type === 'summarize') {
+    return (
+      <>
+        <RichText text={result.data.summary} className="text-sm text-zinc-700 dark:text-zinc-300" />
+        {result.data.key_points?.length > 0 && (
+          <>
+            <p className="eyebrow mt-4">Key points</p>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-zinc-700 marker:text-zinc-400 dark:text-zinc-300">
+              {result.data.key_points.map((point) => <li key={point}>{point}</li>)}
+            </ul>
+          </>
+        )}
+      </>
+    );
+  }
+  if (result.type === 'explain') {
+    return (
+      <>
+        <RichText text={result.data.explanation} className="text-sm text-zinc-700 dark:text-zinc-300" />
+        <Sources pages={result.data.sources} />
+      </>
+    );
+  }
+  if (result.type === 'practice') {
+    return (
+      <ol className="space-y-4">
+        {result.data.problems.map((problem, idx) => (
+          <li key={problem.question} className="text-sm">
+            <p className="font-medium text-zinc-900 dark:text-zinc-100">{idx + 1}. {problem.question}</p>
+            <details className="group mt-2">
+              <summary className="muted cursor-pointer text-xs hover:text-zinc-900 dark:hover:text-zinc-100">Hint</summary>
+              <p className="mt-1 text-zinc-600 dark:text-zinc-400">{problem.hint}</p>
+            </details>
+            <details className="mt-1">
+              <summary className="muted cursor-pointer text-xs hover:text-zinc-900 dark:hover:text-zinc-100">Model answer</summary>
+              <p className="mt-1 text-zinc-600 dark:text-zinc-400">{problem.answer}</p>
+            </details>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  if (result.type === 'study-plan') {
+    return (
+      <ol className="space-y-3">
+        {result.data.plan.map((day) => (
+          <li key={day.day} className="flex gap-3">
+            <span className="mt-0.5 grid h-6 w-6 flex-shrink-0 place-items-center rounded-md bg-zinc-100 text-xs font-semibold tabular-nums dark:bg-zinc-800">{day.day}</span>
+            <div className="text-sm">
+              <p className="font-medium text-zinc-900 dark:text-zinc-100">{day.topic}</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-zinc-600 marker:text-zinc-400 dark:text-zinc-400">
+                {day.activities.map((a) => <li key={a}>{a}</li>)}
+              </ul>
+            </div>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  return null;
+};
 
 const QuickActions = ({ documentId }) => {
   const [active, setActive] = useState(null);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
 
-  const run = async (actionId, value) => {
+  const run = async (tool, value = '') => {
     setLoading(true);
     setResult(null);
+    setError(null);
     try {
       let res;
-      if (actionId === 'summarize') res = await assistantAPI.summarizeDocument(documentId, 'brief');
-      if (actionId === 'explain') res = await assistantAPI.explainConcept(documentId, value);
-      if (actionId === 'practice') res = await assistantAPI.generatePractice(documentId, value || 'general', 5);
-      if (actionId === 'study-plan') {
-        const areas = value.split(',').map((a) => a.trim()).filter(Boolean);
-        res = await assistantAPI.createStudyPlan(documentId, areas, 7);
+      if (tool.id === 'summarize') res = await assistantAPI.summarizeDocument(documentId, 'brief');
+      if (tool.id === 'explain') res = await assistantAPI.explainConcept(documentId, value);
+      if (tool.id === 'practice') res = await assistantAPI.generatePractice(documentId, value || 'general', 5);
+      if (tool.id === 'study-plan') {
+        res = await assistantAPI.createStudyPlan(documentId, value.split(',').map((a) => a.trim()).filter(Boolean), 7);
       }
-      setResult({ type: actionId, data: res.data });
-    } catch (error) {
-      setResult({ type: 'error', message: errorMessage(error) });
+      setResult({ type: tool.id, title: tool.name, data: res.data });
+    } catch (err) {
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
       setActive(null);
@@ -39,142 +106,86 @@ const QuickActions = ({ documentId }) => {
     }
   };
 
-  const onPick = (action) => {
-    setResult(null);
-    if (action.input) {
-      setActive(action.id);
-      setDraft('');
-    } else {
-      run(action.id);
-    }
-  };
-
-  const renderResult = () => {
-    if (!result) return null;
-    if (result.type === 'error') {
-      return <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-200">{result.message}</div>;
-    }
-    if (result.type === 'summarize') {
-      return (
-        <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-          <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">Summary</h4>
-          <p className="text-sm text-blue-800 dark:text-blue-300 whitespace-pre-wrap">{result.data.summary}</p>
-          {result.data.key_points?.length > 0 && (
-            <ul className="mt-3 text-xs text-blue-800 dark:text-blue-300 space-y-1 list-disc list-inside">
-              {result.data.key_points.map((point) => <li key={point}>{point}</li>)}
-            </ul>
-          )}
-        </div>
-      );
-    }
-    if (result.type === 'explain') {
-      return (
-        <div className="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-          <h4 className="font-semibold text-yellow-900 dark:text-yellow-200 mb-2">{result.data.concept}</h4>
-          <div className="text-sm text-yellow-800 dark:text-yellow-300 whitespace-pre-wrap">{result.data.explanation}</div>
-          <Pages pages={result.data.sources} />
-        </div>
-      );
-    }
-    if (result.type === 'practice') {
-      return (
-        <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg max-h-96 overflow-y-auto">
-          <h4 className="font-semibold text-green-900 dark:text-green-200 mb-2">Practice: {result.data.topic}</h4>
-          <div className="space-y-3">
-            {result.data.problems.map((problem, idx) => (
-              <div key={problem.question} className="p-3 bg-white dark:bg-gray-800 rounded border border-green-200 dark:border-green-700">
-                <p className="text-sm font-medium text-green-900 dark:text-green-200 mb-1">Question {idx + 1}</p>
-                <p className="text-sm text-gray-700 dark:text-gray-300">{problem.question}</p>
-                <details className="mt-2"><summary className="text-xs text-green-600 dark:text-green-400 cursor-pointer">Hint</summary><p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{problem.hint}</p></details>
-                <details className="mt-1"><summary className="text-xs text-green-600 dark:text-green-400 cursor-pointer">Answer</summary><p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{problem.answer}</p></details>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    if (result.type === 'study-plan') {
-      return (
-        <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg max-h-96 overflow-y-auto">
-          <h4 className="font-semibold text-purple-900 dark:text-purple-200 mb-2">{result.data.duration_days}-day plan</h4>
-          <div className="space-y-2">
-            {result.data.plan.map((day) => (
-              <div key={day.day} className="p-3 bg-white dark:bg-gray-800 rounded border border-purple-200 dark:border-purple-700">
-                <p className="text-sm font-semibold text-purple-900 dark:text-purple-200">Day {day.day}: {day.topic}</p>
-                <ul className="text-xs text-gray-700 dark:text-gray-300 mt-1 space-y-0.5 list-disc list-inside">
-                  {day.activities.map((a) => <li key={a}>{a}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const activeAction = ACTIONS.find((a) => a.id === active);
+  const activeTool = TOOLS.find((t) => t.id === active);
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4">
-        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Quick actions</h3>
-        <div className="space-y-2">
-          {ACTIONS.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              onClick={() => onPick(action)}
-              disabled={loading}
-              className={`w-full text-left p-3 rounded-lg transition ${action.color} hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed ${active === action.id ? 'ring-2 ring-indigo-400' : ''}`}
-            >
-              <div className="flex items-start space-x-2">
-                <span className="text-2xl">{action.icon}</span>
-                <div className="flex-1">
-                  <p className="font-semibold text-sm">{action.name}</p>
-                  <p className="text-xs opacity-75">{action.description}</p>
-                </div>
-              </div>
-            </button>
-          ))}
+    <aside className="space-y-4">
+      <section className="card">
+        <div className="card-header py-3">
+          <h2 className="card-title">Study tools</h2>
         </div>
+        <ul className="p-2">
+          {TOOLS.map((tool) => {
+            const Icon = tool.icon;
+            return (
+              <li key={tool.id}>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setError(null);
+                    if (tool.prompt) {
+                      setActive(active === tool.id ? null : tool.id);
+                      setDraft('');
+                    } else {
+                      run(tool);
+                    }
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800 ${
+                    active === tool.id ? 'bg-zinc-100 dark:bg-zinc-800' : ''
+                  }`}
+                >
+                  <Icon className="h-4 w-4 flex-shrink-0 text-zinc-500 dark:text-zinc-400" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{tool.name}</span>
+                    <span className="muted block text-xs">{tool.description}</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-zinc-300 dark:text-zinc-600" />
+                </button>
+                {activeTool?.id === tool.id && (
+                  <form
+                    className="flex gap-2 px-3 pb-3 pt-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (draft.trim() || tool.optional) run(tool, draft.trim());
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      placeholder={tool.placeholder}
+                      aria-label={tool.prompt}
+                      maxLength={200}
+                      className="input py-1.5"
+                    />
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={!draft.trim() && !tool.optional}>Go</button>
+                  </form>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
-        {activeAction && (
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (draft.trim()) run(activeAction.id, draft.trim());
-            }}
-          >
-            <input
-              autoFocus
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder={activeAction.input}
-              maxLength={200}
-              className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-            <button type="submit" className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Go</button>
-          </form>
-        )}
-
-        {loading && (
-          <div className="mt-4 text-center">
-            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" />
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Working…</p>
+      {(loading || result || error) && (
+        <section className="card animate-fade-in">
+          <div className="card-header py-3">
+            <h2 className="card-title">{loading ? 'Working…' : error ? 'Something went wrong' : result.title}</h2>
+            {!loading && (
+              <button type="button" className="btn btn-ghost btn-icon -mr-2" onClick={() => { setResult(null); setError(null); }} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        )}
-        {renderResult()}
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 text-sm text-gray-600 dark:text-gray-400 space-y-2">
-        <h3 className="font-semibold text-gray-900 dark:text-white">How the tutor works</h3>
-        <p>It retrieves the most relevant passages from your document and answers only from those.</p>
-        <p>Page numbers in square brackets show where an answer came from, so you can check it.</p>
-        <p>If the document does not cover something, it says so rather than guessing.</p>
-      </div>
-    </div>
+          <div className="max-h-[28rem] overflow-y-auto p-5">
+            {loading && <LoadingSpinner size="small" label="Reading your document" className="justify-start" />}
+            {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+            {result && <Result result={result} />}
+          </div>
+        </section>
+      )}
+    </aside>
   );
 };
 

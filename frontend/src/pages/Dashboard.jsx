@@ -1,19 +1,24 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { AlertTriangle, Clock, FileText, Library, ListChecks, Radio, Target } from 'lucide-react';
 import { documentAPI, errorMessage, statsAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../hooks/useAuth';
 import DocumentUpload from '../components/document/DocumentUpload';
 import DocumentList from '../components/document/DocumentList';
+import { forgetDocument } from '../components/document/DocumentLayout';
 import StatsCard from '../components/dashboard/StatsCard';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import PageHeader from '../components/ui/PageHeader';
+import EmptyState from '../components/ui/EmptyState';
+import { PageLoader } from '../components/common/LoadingSpinner';
 
-const EMPTY_STATS = {
-  total_documents: 0,
-  quizzes_taken: 0,
-  average_score: 0,
-  study_time_label: '0s',
-  weakest_documents: [],
+const EMPTY_STATS = { total_documents: 0, quizzes_taken: 0, average_score: 0, study_time_label: '0m', weakest_documents: [] };
+
+const greeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 };
 
 const Dashboard = () => {
@@ -23,21 +28,17 @@ const Dashboard = () => {
   const { addNotification } = useApp();
   const { user } = useAuth();
 
-  const load = useCallback(async () => {
-    try {
-      const [docsRes, statsRes] = await Promise.all([documentAPI.getDocuments(), statsAPI.me()]);
-      setDocuments(docsRes.data.documents || []);
-      setStats(statsRes.data.stats || EMPTY_STATS);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not load dashboard', message: errorMessage(error) });
-    } finally {
-      setLoading(false);
-    }
-  }, [addNotification]);
+  const refreshStats = useCallback(() => statsAPI.me().then((res) => setStats(res.data.stats)).catch(() => {}), []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    Promise.all([documentAPI.getDocuments(), statsAPI.me()])
+      .then(([docsRes, statsRes]) => {
+        setDocuments(docsRes.data.documents || []);
+        setStats(statsRes.data.stats || EMPTY_STATS);
+      })
+      .catch((error) => addNotification({ type: 'error', title: 'Could not load your library', message: errorMessage(error) }))
+      .finally(() => setLoading(false));
+  }, [addNotification]);
 
   const handleUploaded = (document) => {
     setDocuments((prev) => [document, ...prev]);
@@ -45,100 +46,98 @@ const Dashboard = () => {
   };
 
   const handleDelete = async (document) => {
-    if (!window.confirm(`Delete "${document.filename}" and everything generated from it?`)) return;
+    if (!window.confirm(`Delete "${document.filename}"? Its quizzes, flashcards and chat history will be removed too.`)) return;
     try {
       await documentAPI.deleteDocument(document._id);
+      forgetDocument(document._id);
       setDocuments((prev) => prev.filter((d) => d._id !== document._id));
-      addNotification({ type: 'success', title: 'Deleted', message: `${document.filename} removed` });
-      statsAPI.me().then((res) => setStats(res.data.stats)).catch(() => {});
+      addNotification({ type: 'success', title: 'Document deleted', message: document.filename });
+      refreshStats();
     } catch (error) {
       addNotification({ type: 'error', title: 'Delete failed', message: errorMessage(error) });
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size="large" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader />;
+
+  const firstName = user?.name?.split(' ')[0] || 'there';
 
   return (
-    <div className="space-y-8">
-      <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg text-white p-8">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-heading font-bold mb-2">Welcome back, {user?.name || 'Student'}!</h1>
-            <p className="text-primary-100 text-lg">Upload notes, then quiz, review and chat about them.</p>
-          </div>
-          <Link
-            to="/study-rooms"
-            className="bg-white text-primary-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-          >
-            Live quiz rooms
-          </Link>
-        </div>
-      </div>
+    <div>
+      <PageHeader
+        title={`${greeting()}, ${firstName}`}
+        description="Upload course material, then study it with the tutor, quizzes and flashcards."
+        actions={
+          documents.length > 0 && (
+            <Link to="/create-quiz-room" className="btn btn-secondary">
+              <Radio className="h-4 w-4" />
+              Host live quiz
+            </Link>
+          )
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatsCard title="Documents" value={stats.total_documents} icon="📚" color="blue" />
-        <StatsCard title="Quizzes taken" value={stats.quizzes_taken} icon="📝" color="green" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatsCard title="Documents" value={stats.total_documents} icon={Library} />
+        <StatsCard title="Quizzes taken" value={stats.quizzes_taken} icon={ListChecks} />
         <StatsCard
           title="Average score"
           value={stats.quizzes_taken ? `${stats.average_score}%` : '—'}
-          icon="🎯"
-          color="purple"
+          icon={Target}
+          hint={stats.quizzes_taken ? null : 'Take a quiz to see this'}
         />
-        <StatsCard title="Time in quizzes" value={stats.study_time_label} icon="⏱️" color="orange" />
+        <StatsCard title="Time in quizzes" value={stats.study_time_label} icon={Clock} />
       </div>
 
       {stats.weakest_documents?.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-amber-900 mb-3">Worth another look</h2>
-          <ul className="space-y-2">
+        <section className="card mt-6">
+          <div className="card-header">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <h2 className="card-title">Worth revisiting</h2>
+            </div>
+            <span className="muted text-xs">Lowest average quiz scores</span>
+          </div>
+          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {stats.weakest_documents.map((row) => (
-              <li key={row.document_id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="text-amber-900">
-                  <span className="font-medium">{row.filename}</span>
-                  <span className="text-amber-700">
-                    {' '}
-                    · {row.average_score}% average over {row.attempts} attempt{row.attempts === 1 ? '' : 's'}
-                  </span>
+              <li key={row.document_id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <p className="min-w-0 basis-full truncate text-sm font-medium sm:flex-1 sm:basis-auto">{row.filename}</p>
+                <span className={`badge ${row.average_score >= 70 ? 'badge-success' : row.average_score >= 50 ? 'badge-warning' : 'badge-danger'}`}>
+                  {row.average_score}% avg
                 </span>
-                <span className="flex gap-2">
-                  <Link to={`/document/${row.document_id}/chat`} className="text-indigo-700 hover:underline">
-                    Ask the tutor
-                  </Link>
-                  <Link to={`/document/${row.document_id}/quiz`} className="text-indigo-700 hover:underline">
-                    Retry quiz
-                  </Link>
+                <span className="muted text-xs">
+                  {row.attempts} {row.attempts === 1 ? 'attempt' : 'attempts'}
                 </span>
+                <div className="ml-auto flex gap-1">
+                  <Link to={`/document/${row.document_id}/chat`} className="btn btn-ghost btn-sm">Ask tutor</Link>
+                  <Link to={`/document/${row.document_id}/quiz`} className="btn btn-secondary btn-sm">Retry quiz</Link>
+                </div>
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <h2 className="text-xl font-heading font-semibold text-gray-900 mb-4">Upload a document</h2>
-        <DocumentUpload onUpload={handleUploaded} />
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-heading font-semibold text-gray-900">Your documents ({documents.length})</h2>
-          {documents.length > 0 && (
-            <Link
-              to="/create-quiz-room"
-              className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition-colors"
-            >
-              Host a live quiz
-            </Link>
-          )}
+      <section className="card mt-6">
+        <div className="card-header">
+          <h2 className="card-title">Library</h2>
+          <span className="muted text-xs">
+            {documents.length} {documents.length === 1 ? 'document' : 'documents'}
+          </span>
         </div>
-        <DocumentList documents={documents} onDelete={handleDelete} />
-      </div>
+        <div className="border-b border-zinc-200 p-5 dark:border-zinc-800">
+          <DocumentUpload onUpload={handleUploaded} compact={documents.length > 0} />
+        </div>
+        {documents.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No documents yet"
+            description="Upload lecture notes, a textbook chapter or slides to get started."
+          />
+        ) : (
+          <DocumentList documents={documents} onDelete={handleDelete} />
+        )}
+      </section>
     </div>
   );
 };

@@ -4,7 +4,8 @@ import { useSocket } from '../hooks/useSocket';
 import { errorMessage, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
 import { useApp } from '../contexts/AppContext';
-import LoadingSpinner from '../components/common/LoadingSpinner';
+import { LogOut } from 'lucide-react';
+import { PageLoader } from '../components/common/LoadingSpinner';
 import QuizLobby from '../components/room/QuizLobby';
 import LiveQuiz from '../components/room/LiveQuiz';
 import QuizResults from '../components/room/QuizResults';
@@ -49,11 +50,13 @@ const RoomPage = () => {
         setRoom(data);
         setParticipants(data.participants || []);
         setQuizState(data.quiz_state);
+        if (data.quiz_state === 'completed') setReview(data.questions || []);
         if (data.quiz_state === 'in_progress' && data.questions?.length) {
           setQuestion({
             question_index: data.current_question_index,
             question: data.questions[data.current_question_index],
             total_questions: data.questions.length,
+            question_started_at: data.question_started_at,
           });
         }
       })
@@ -72,9 +75,11 @@ const RoomPage = () => {
       setParticipants(fresh.participants || []);
       setQuizState(fresh.quiz_state);
     };
-    const onParticipants = ({ participants: list, message }) => {
+    // Joins show up in the player list itself; only departures get a toast.
+    const onParticipants = ({ participants: list }) => setParticipants(list || []);
+    const onParticipantLeft = ({ participants: list, message }) => {
       setParticipants(list || []);
-      if (message) addNotification({ type: 'info', title: 'Room', message });
+      if (message) addNotification({ type: 'info', title: 'Player left', message });
     };
     const onRoomClosed = () => {
       addNotification({ type: 'info', title: 'Room closed', message: 'The host ended this room.' });
@@ -98,7 +103,7 @@ const RoomPage = () => {
 
     socket.on('joined', onJoined);
     socket.on('participant_joined', onParticipants);
-    socket.on('participant_left', onParticipants);
+    socket.on('participant_left', onParticipantLeft);
     socket.on('room_closed', onRoomClosed);
     socket.on('quiz_started', onQuestion);
     socket.on('next_question', onQuestion);
@@ -115,7 +120,7 @@ const RoomPage = () => {
     return () => {
       socket.off('joined', onJoined);
       socket.off('participant_joined', onParticipants);
-      socket.off('participant_left', onParticipants);
+      socket.off('participant_left', onParticipantLeft);
       socket.off('room_closed', onRoomClosed);
       socket.off('quiz_started', onQuestion);
       socket.off('next_question', onQuestion);
@@ -145,23 +150,35 @@ const RoomPage = () => {
     navigate('/study-rooms');
   };
 
-  if (loading || !room) {
-    return (
-      <div className="flex flex-col justify-center items-center h-64">
-        <LoadingSpinner size="large" />
-        <p className="mt-4 text-gray-600">Loading room…</p>
-      </div>
-    );
-  }
+  if (loading || !room) return <PageLoader label="Loading quiz…" />;
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4 text-sm">
-        <span className={`px-2 py-1 rounded ${isConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-          {isConnected ? 'Connected' : 'Reconnecting…'}
-        </span>
-        <button type="button" onClick={leave} className="text-red-600 hover:underline">
-          {isHost ? 'Close room' : 'Leave room'}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold tracking-tight">{room.room_name}</h1>
+          <p className="muted mt-0.5 flex items-center gap-2 text-xs">
+            {quizState === 'completed' ? (
+              <span>Finished</span>
+            ) : (
+              <>
+                <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-500' : 'animate-pulse bg-amber-500'}`} />
+                {isConnected ? (quizState === 'lobby' ? 'Waiting for players' : 'Live') : 'Reconnecting…'}
+              </>
+            )}
+            <span>·</span>
+            <span className="font-mono">{room.room_code}</span>
+            {isHost && (
+              <>
+                <span>·</span>
+                <span>You are hosting</span>
+              </>
+            )}
+          </p>
+        </div>
+        <button type="button" onClick={leave} className="btn btn-secondary btn-sm">
+          <LogOut className="h-3.5 w-3.5" />
+          {quizState === 'completed' ? (isHost ? 'Close room' : 'Leave') : isHost ? 'End quiz' : 'Leave'}
         </button>
       </div>
 
@@ -181,6 +198,7 @@ const RoomPage = () => {
           participants={participants}
           isHost={isHost}
           onNextQuestion={nextQuestion}
+          startedAt={question.question_started_at}
         />
       )}
 
@@ -189,7 +207,7 @@ const RoomPage = () => {
       )}
 
       {quizState === 'closed' && (
-        <div className="text-center py-12 text-gray-600">This room has been closed by the host.</div>
+        <div className="card muted px-6 py-12 text-center text-sm">The host has ended this quiz.</div>
       )}
     </div>
   );

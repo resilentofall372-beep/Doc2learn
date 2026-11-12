@@ -1,35 +1,33 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Clock, FileText, Gauge, ListChecks, Users } from 'lucide-react';
 import { errorMessage, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
-import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../hooks/useAuth';
-import LoadingSpinner from '../components/common/LoadingSpinner';
-
-const AVATARS = ['😊', '😎', '🤓', '🎓', '🌟', '🚀', '💡', '🎯', '🔥', '⚡', '🎨', '🦉'];
+import Avatar, { AVATAR_COLORS } from '../components/ui/Avatar';
+import EmptyState from '../components/ui/EmptyState';
+import LoadingSpinner, { PageLoader } from '../components/common/LoadingSpinner';
 
 const JoinRoom = () => {
   const { roomCode } = useParams();
   const navigate = useNavigate();
-  const { addNotification } = useApp();
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [room, setRoom] = useState(null);
   const [error, setError] = useState(null);
+  const [joinError, setJoinError] = useState(null);
   const [name, setName] = useState(user?.name || '');
-  const [avatar, setAvatar] = useState(AVATARS[0]);
+  const [color, setColor] = useState(Math.floor(Math.random() * AVATAR_COLORS.length));
 
   const load = useCallback(async () => {
     try {
       const res = await roomAPI.getRoomByCode(roomCode);
       setRoom(res.data.room);
-      // Already in this room (e.g. page refresh)? Go straight back in.
-      const existing = roomIdentity.load(res.data.room.room_id);
-      if (existing) navigate(`/room/${res.data.room.room_id}`, { replace: true });
+      if (roomIdentity.load(res.data.room.room_id)) navigate(`/room/${res.data.room.room_id}`, { replace: true });
     } catch (err) {
-      setError(errorMessage(err, 'This room code is invalid or has expired'));
+      setError(errorMessage(err, 'This code is invalid or the quiz has ended.'));
     } finally {
       setLoading(false);
     }
@@ -42,113 +40,104 @@ const JoinRoom = () => {
   const join = async (e) => {
     e.preventDefault();
     if (name.trim().length < 2) {
-      addNotification({ type: 'error', title: 'Name needed', message: 'At least 2 characters.' });
+      setJoinError('Enter a name of at least 2 characters.');
       return;
     }
     setJoining(true);
+    setJoinError(null);
     try {
-      const res = await roomAPI.join({ room_code: roomCode, participant_name: name.trim(), avatar });
+      const res = await roomAPI.join({ room_code: roomCode, participant_name: name.trim(), avatar: `c${color}` });
       const { room: joined, participant_id, participant_token } = res.data;
       roomIdentity.save(joined.room_id, { participant_id, participant_token, is_host: false });
       navigate(`/room/${joined.room_id}`);
     } catch (err) {
-      addNotification({ type: 'error', title: 'Could not join', message: errorMessage(err) });
+      setJoinError(errorMessage(err, 'Could not join'));
     } finally {
       setJoining(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col justify-center items-center h-64">
-        <LoadingSpinner size="large" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader />;
 
   if (error || !room) {
     return (
-      <div className="flex flex-col justify-center items-center h-64 text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Room not found</h2>
-        <p className="text-gray-600 mb-6">{error}</p>
-        <button type="button" onClick={() => navigate('/study-rooms')} className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700">
-          Browse rooms
-        </button>
+      <div className="card mx-auto max-w-md">
+        <EmptyState
+          icon={ListChecks}
+          title="Quiz not found"
+          description={error}
+          action={<Link to="/study-rooms" className="btn btn-secondary">Browse open quizzes</Link>}
+        />
       </div>
     );
   }
 
   const canJoin = !room.is_full && room.quiz_state === 'lobby';
+  const facts = [
+    { icon: ListChecks, label: `${room.num_questions} questions` },
+    { icon: Clock, label: `${room.time_per_question}s each` },
+    { icon: Gauge, label: `${room.difficulty[0].toUpperCase()}${room.difficulty.slice(1)} difficulty` },
+    { icon: Users, label: `${room.participants_count}/${room.max_participants} players` },
+  ];
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-        <div className="text-center mb-8">
-          <p className="text-sm text-gray-500 mb-1">Room code</p>
-          <p className="text-4xl font-bold text-primary-600 tracking-widest font-mono mb-4">{room.room_code}</p>
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">{room.room_name}</h1>
-          <p className="text-gray-600">Hosted by <span className="font-semibold">{room.host_name}</span></p>
-          {room.document_name && <p className="text-sm text-gray-400 mt-1">Questions from: {room.document_name}</p>}
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 text-center">
-          {[
-            ['Questions', room.num_questions],
-            ['Per question', `${room.time_per_question}s`],
-            ['Difficulty', room.difficulty],
-            ['Players', `${room.participants_count}/${room.max_participants}`],
-          ].map(([label, value]) => (
-            <div key={label} className="bg-gray-50 rounded-lg p-4">
-              <div className="text-sm text-gray-600">{label}</div>
-              <div className="text-lg font-bold text-gray-900 capitalize">{value}</div>
-            </div>
-          ))}
+    <div className="mx-auto max-w-md">
+      <div className="card overflow-hidden">
+        <div className="border-b border-zinc-200 px-6 py-6 text-center dark:border-zinc-800">
+          <span className="badge badge-neutral font-mono tracking-widest">{room.room_code}</span>
+          <h1 className="mt-3 text-xl font-semibold tracking-tight">{room.room_name}</h1>
+          <p className="muted mt-1 text-sm">Hosted by {room.host_name}</p>
+          {room.document_name && (
+            <p className="muted mt-2 inline-flex items-center gap-1 text-xs">
+              <FileText className="h-3.5 w-3.5" />
+              {room.document_name}
+            </p>
+          )}
+          <div className="mt-5 grid grid-cols-2 gap-2 text-left">
+            {facts.map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-xs dark:bg-zinc-800/60">
+                <Icon className="h-3.5 w-3.5 text-zinc-400" />
+                {label}
+              </div>
+            ))}
+          </div>
         </div>
 
         {canJoin ? (
-          <form onSubmit={join} className="space-y-6">
+          <form onSubmit={join} className="space-y-5 px-6 py-6">
+            {joinError && <div className="alert alert-danger">{joinError}</div>}
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">Your display name</label>
-              <input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                maxLength={30}
-                autoFocus
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-lg"
-              />
+              <label htmlFor="name" className="label">Display name</label>
+              <input id="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={30} autoFocus className="input" placeholder="How others will see you" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Avatar</label>
-              <div className="grid grid-cols-6 gap-3">
-                {AVATARS.map((emoji) => (
+              <span className="label">Colour</span>
+              <div className="flex flex-wrap gap-2">
+                {AVATAR_COLORS.map((bg, i) => (
                   <button
-                    key={emoji}
+                    key={bg}
                     type="button"
-                    onClick={() => setAvatar(emoji)}
-                    className={`text-3xl p-3 rounded-lg border-2 transition-all ${avatar === emoji ? 'border-primary-500 bg-primary-50 scale-110' : 'border-gray-200 hover:border-gray-300'}`}
-                  >
-                    {emoji}
-                  </button>
+                    onClick={() => setColor(i)}
+                    aria-label={`Colour ${i + 1}`}
+                    aria-pressed={color === i}
+                    className={`h-8 w-8 rounded-full ${bg} ring-offset-2 transition dark:ring-offset-zinc-900 ${color === i ? 'ring-2 ring-zinc-900 dark:ring-zinc-100' : 'hover:scale-105'}`}
+                  />
                 ))}
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={joining || name.trim().length < 2}
-              className="w-full bg-primary-600 text-white py-4 rounded-lg text-lg font-semibold hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {joining ? 'Joining…' : 'Join room'}
+            <div className="flex items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2.5 dark:border-zinc-800">
+              <Avatar name={name || '?'} avatar={`c${color}`} size="sm" />
+              <span className="text-sm font-medium">{name || 'Your name'}</span>
+            </div>
+            <button type="submit" disabled={joining} className="btn btn-primary w-full">
+              {joining ? <LoadingSpinner size="small" /> : 'Join quiz'}
             </button>
           </form>
         ) : (
-          <div className="text-center py-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">{room.is_full ? 'Room is full' : 'Quiz already started'}</h3>
-            <p className="text-gray-600">Ask the host for a new room, or browse open lobbies.</p>
-            <button type="button" onClick={() => navigate('/study-rooms')} className="mt-6 bg-gray-700 text-white px-6 py-3 rounded-lg hover:bg-gray-800">
-              Browse rooms
-            </button>
+          <div className="px-6 py-8 text-center">
+            <p className="text-sm font-semibold">{room.is_full ? 'This quiz is full' : 'This quiz has already started'}</p>
+            <p className="muted mt-1 text-sm">Ask the host to start a new one.</p>
+            <Link to="/study-rooms" className="btn btn-secondary mt-5">Browse open quizzes</Link>
           </div>
         )}
       </div>

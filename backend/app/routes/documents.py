@@ -55,10 +55,14 @@ def upload():
     if "file" not in request.files:
         raise ApiError("No file provided")
     upload_file = request.files["file"]
-    filename = secure_filename(upload_file.filename or "")
-    if not filename or "." not in filename:
+    # The file is only ever written to a random temp path, so the original name is
+    # kept for display (minus any directory parts); secure_filename guards the extension.
+    raw_name = (upload_file.filename or "").replace("\\", "/").rsplit("/", 1)[-1]
+    filename = clean_str(raw_name, 200)
+    safe = secure_filename(raw_name)
+    if not filename or "." not in safe:
         raise ApiError("The file needs a name with an extension")
-    ext = filename.rsplit(".", 1)[1].lower()
+    ext = safe.rsplit(".", 1)[1].lower()
     if ext not in current_app.config["ALLOWED_EXTENSIONS"]:
         raise ApiError(f"Unsupported file type .{ext}. Use PDF, DOCX, PPTX, TXT, MD, PNG or JPG.")
 

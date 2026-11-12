@@ -1,84 +1,57 @@
-// src/components/assistant/ChatMessage.jsx
 import React from 'react';
+import { AlertCircle, BookOpen } from 'lucide-react';
+import RichText from '../ui/RichText';
+
+const CONFIDENCE = {
+  high: { label: 'Grounded in the document', className: 'badge-success' },
+  medium: { label: 'Partly grounded', className: 'badge-warning' },
+  low: { label: 'Not covered by the document', className: 'badge-neutral' },
+};
+
+const formatTime = (timestamp) =>
+  timestamp ? new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
 const ChatMessage = ({ message }) => {
-  const isUser = message.role === 'user';
-  const isError = message.isError;
-  
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  };
-  
-  return (
-    <div className={`flex items-start space-x-3 ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
-      {/* Avatar */}
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-        isUser 
-          ? 'bg-indigo-600' 
-          : isError 
-            ? 'bg-red-100 dark:bg-red-900' 
-            : 'bg-indigo-100 dark:bg-indigo-900'
-      }`}>
-        <span className="text-lg">
-          {isUser ? '👤' : isError ? '⚠️' : '🤖'}
-        </span>
-      </div>
-      
-      {/* Message Content */}
-      <div className={`flex-1 ${isUser ? 'flex justify-end' : ''}`}>
-        <div className={`max-w-3xl rounded-lg px-4 py-3 ${
-          isUser 
-            ? 'bg-indigo-600 text-white' 
-            : isError
-              ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-        }`}>
-          {/* Message Text */}
-          <p className="whitespace-pre-wrap break-words">
-            {message.content}
-          </p>
-          
-          {/* Sources (if available) */}
-          {message.metadata?.sources && message.metadata.sources.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
-              <p className="text-xs font-semibold mb-1">📚 Sources:</p>
-              <div className="flex flex-wrap gap-2">
-                {message.metadata.sources.map((source, idx) => (
-                  <span
-                    key={idx}
-                    className="px-2 py-1 bg-white dark:bg-gray-800 rounded text-xs text-gray-700 dark:text-gray-300"
-                  >
-                    Page {source}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Confidence (if available) */}
-          {message.metadata?.confidence && (
-            <div className="mt-2">
-              <span className={`text-xs px-2 py-0.5 rounded ${
-                message.metadata.confidence === 'high' 
-                  ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200' 
-                  : message.metadata.confidence === 'medium'
-                    ? 'bg-yellow-200 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-                    : 'bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200'
-              }`}>
-                {message.metadata.confidence} confidence
-              </span>
-            </div>
-          )}
-          
-          {/* Timestamp */}
-          <div className={`mt-2 text-xs ${
-            isUser ? 'text-indigo-200' : 'text-gray-500 dark:text-gray-400'
-          }`}>
-            {formatTime(message.timestamp)}
-          </div>
+  if (message.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary-600 px-4 py-2.5 text-sm text-white shadow-sm">
+          <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
+      </div>
+    );
+  }
+
+  const sources = message.metadata?.sources || [];
+  const confidence = CONFIDENCE[message.metadata?.confidence];
+
+  return (
+    <div className="flex gap-3">
+      <div
+        className={`mt-0.5 grid h-7 w-7 flex-shrink-0 place-items-center rounded-full ${
+          message.isError
+            ? 'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400'
+            : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+        }`}
+      >
+        {message.isError ? <AlertCircle className="h-3.5 w-3.5" /> : <BookOpen className="h-3.5 w-3.5" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <RichText
+          text={message.content}
+          className={`text-sm ${message.isError ? 'text-red-700 dark:text-red-300' : 'text-zinc-700 dark:text-zinc-300'}`}
+        />
+        {(sources.length > 0 || confidence) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {confidence && <span className={`badge ${confidence.className}`}>{confidence.label}</span>}
+            {sources.length > 0 && (
+              <span className="muted text-xs">
+                Sources: {sources.map((page) => `p. ${page}`).join(', ')}
+              </span>
+            )}
+          </div>
+        )}
+        {message.timestamp && <p className="mt-2 text-[11px] text-zinc-400">{formatTime(message.timestamp)}</p>}
       </div>
     </div>
   );

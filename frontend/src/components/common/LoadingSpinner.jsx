@@ -1,19 +1,15 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 
-const LoadingSpinner = ({ size = 'medium', className = '' }) => {
-  const sizeClasses = {
-    small: 'h-4 w-4',
-    medium: 'h-8 w-8',
-    large: 'h-12 w-12'
-  };
+const SIZES = { small: 'h-4 w-4', medium: 'h-6 w-6', large: 'h-8 w-8' };
 
-  return (
-    <div className={`flex justify-center items-center ${className}`}>
-      <div
-        className={`animate-spin rounded-full border-b-2 border-primary-600 ${sizeClasses[size]}`}
-      ></div>
-    </div>
-  );
-};
+const LoadingSpinner = ({ size = 'medium', className = '', label }) => (
+  <div className={`flex items-center justify-center gap-3 ${className}`} role="status">
+    <Loader2 className={`animate-spin text-zinc-400 ${SIZES[size]}`} />
+    {label ? <span className="muted text-sm">{label}</span> : <span className="sr-only">Loading</span>}
+  </div>
+);
+
+export const PageLoader = ({ label }) => <LoadingSpinner size="medium" label={label} className="py-24" />;
 
 export default LoadingSpinner;

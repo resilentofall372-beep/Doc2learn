@@ -1,98 +1,67 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { FileText, Layers, ListChecks, MessageSquareText, Network, Trash2 } from 'lucide-react';
 
 const formatSize = (bytes) => {
-  if (!bytes) return '';
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (!bytes) return null;
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1048576).toFixed(1)} MB`;
 };
 
-const DocumentList = ({ documents, onDelete }) => {
-  if (documents.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <div className="text-5xl mb-4">📄</div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No documents yet</h3>
-        <p className="text-gray-500">Upload lecture notes, a chapter, or slides to get started.</p>
-      </div>
-    );
-  }
+const formatDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {documents.map((doc) => (
-        <div key={doc._id} className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow flex flex-col">
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1 min-w-0">
-              <h3 className="text-lg font-semibold text-gray-900 truncate" title={doc.filename}>
+const ACTIONS = [
+  { path: 'quiz', label: 'Quiz', icon: ListChecks },
+  { path: 'flashcards', label: 'Flashcards', icon: Layers },
+  { path: 'mindmap', label: 'Concept map', icon: Network },
+];
+
+const DocumentList = ({ documents, onDelete }) => (
+  <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+    {documents.map((doc) => {
+      const meta = [
+        doc.file_type?.toUpperCase(),
+        doc.page_count ? `${doc.page_count} ${doc.page_count === 1 ? 'page' : 'pages'}` : null,
+        formatSize(doc.file_size),
+        formatDate(doc.uploaded_on),
+      ].filter(Boolean);
+      return (
+        <li key={doc._id} className="group flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
+          <Link to={`/document/${doc._id}/chat`} className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+              <FileText className="h-4 w-4" strokeWidth={1.75} />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-zinc-900 group-hover:text-primary-600 dark:text-zinc-100 dark:group-hover:text-primary-400" title={doc.filename}>
                 {doc.filename}
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                {new Date(doc.uploaded_on).toLocaleDateString()}
-                {doc.page_count ? ` · ${doc.page_count} page${doc.page_count === 1 ? '' : 's'}` : ''}
-                {doc.file_size ? ` · ${formatSize(doc.file_size)}` : ''}
               </p>
-              {doc.quiz_count > 0 && (
-                <p className="text-xs text-gray-400 mt-1">
-                  {doc.quiz_count} quiz{doc.quiz_count === 1 ? '' : 'zes'} generated
-                </p>
-              )}
+              <p className="muted mt-0.5 truncate text-xs">
+                {meta.join(' · ')}
+                {doc.quiz_count > 0 && ` · ${doc.quiz_count} ${doc.quiz_count === 1 ? 'quiz' : 'quizzes'}`}
+              </p>
             </div>
-            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center ml-4 flex-shrink-0">
-              <span className="text-primary-600 font-bold text-xs uppercase">{doc.file_type || 'file'}</span>
-            </div>
-          </div>
+          </Link>
 
-          <div className="space-y-2 mt-auto">
-            <Link
-              to={`/document/${doc._id}/chat`}
-              className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 transition-colors block text-center"
-            >
-              Chat with tutor
+          <div className="flex flex-shrink-0 items-center gap-1 pl-12 sm:pl-0">
+            <Link to={`/document/${doc._id}/chat`} className="btn btn-secondary btn-sm">
+              <MessageSquareText className="h-3.5 w-3.5" />
+              Study
             </Link>
-            <div className="grid grid-cols-3 gap-2">
-              <Link
-                to={`/document/${doc._id}/quiz`}
-                className="bg-primary-600 text-white px-2 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition-colors text-center"
-              >
-                Quiz
+            {ACTIONS.map(({ path, label, icon: Icon }) => (
+              <Link key={path} to={`/document/${doc._id}/${path}`} className="btn btn-ghost btn-icon" title={label} aria-label={`${label} for ${doc.filename}`}>
+                <Icon className="h-4 w-4" />
               </Link>
-              <Link
-                to={`/document/${doc._id}/flashcards`}
-                className="bg-secondary-600 text-white px-2 py-2 rounded-md text-sm font-medium hover:bg-secondary-700 transition-colors text-center"
-              >
-                Flashcards
-              </Link>
-              <Link
-                to={`/document/${doc._id}/mindmap`}
-                className="bg-gray-600 text-white px-2 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors text-center"
-              >
-                Mind map
-              </Link>
-            </div>
-            <div className="flex gap-2">
-              <Link
-                to={`/create-quiz-room?document=${doc._id}`}
-                className="flex-1 border border-primary-600 text-primary-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-50 transition-colors text-center"
-              >
-                Host live quiz
-              </Link>
-              {onDelete && (
-                <button
-                  type="button"
-                  onClick={() => onDelete(doc)}
-                  className="border border-red-200 text-red-600 px-3 py-2 rounded-md text-sm hover:bg-red-50 transition-colors"
-                  title="Delete document"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
+            ))}
+            {onDelete && (
+              <button type="button" onClick={() => onDelete(doc)} className="btn btn-danger btn-icon" title="Delete" aria-label={`Delete ${doc.filename}`}>
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        </div>
-      ))}
-    </div>
-  );
-};
+        </li>
+      );
+    })}
+  </ul>
+);
 
 export default DocumentList;

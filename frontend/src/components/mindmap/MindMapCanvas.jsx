@@ -1,222 +1,110 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+
+// Horizontal tree: central topic on the left, branches in the middle, subtopics on the right.
+const COL_X = [0, 290, 590];
+const NODE_W = [230, 240, 260];
+const ROW_H = 46;
+const GAP = 18;
+const PAD = 24;
+
+const layout = (mindmap) => {
+  const branches = (mindmap.branches || []).map((b) => ({
+    topic: b.topic,
+    subtopics: (b.subtopics || []).map((s) => (typeof s === 'string' ? s : s.text)).filter(Boolean),
+  }));
+  let y = PAD;
+  const placed = branches.map((branch, i) => {
+    const rows = Math.max(1, branch.subtopics.length);
+    const height = rows * ROW_H;
+    const top = y;
+    y += height + GAP;
+    return {
+      id: `b${i}`,
+      text: branch.topic,
+      y: top + height / 2,
+      children: branch.subtopics.map((text, j) => ({ id: `b${i}s${j}`, text, y: top + j * ROW_H + ROW_H / 2 })),
+    };
+  });
+  const totalHeight = Math.max(y - GAP + PAD, 160);
+  return { placed, rootY: totalHeight / 2, height: totalHeight };
+};
+
+const curve = (x1, y1, x2, y2) => {
+  const mid = (x1 + x2) / 2;
+  return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
+};
+
+const Node = ({ x, y, width, text, level, active, dimmed, onClick }) => {
+  const styles = [
+    'bg-primary-600 text-white border-primary-600 font-semibold text-sm',
+    'bg-white text-zinc-900 border-zinc-300 font-medium text-sm dark:bg-zinc-800 dark:text-zinc-50 dark:border-zinc-600',
+    'bg-zinc-50 text-zinc-700 border-zinc-200 text-xs dark:bg-zinc-900 dark:text-zinc-300 dark:border-zinc-700',
+  ][level];
+  return (
+    <foreignObject x={x} y={y - 18} width={width} height={36} style={{ overflow: 'visible' }}>
+      <button
+        type="button"
+        onClick={onClick}
+        title={text}
+        className={`flex h-9 w-full items-center rounded-lg border px-3 text-left shadow-sm transition ${styles} ${
+          active ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-zinc-900' : ''
+        } ${dimmed ? 'opacity-35' : ''}`}
+      >
+        <span className="truncate">{text}</span>
+      </button>
+    </foreignObject>
+  );
+};
 
 const MindMapCanvas = ({ mindmap }) => {
-  const canvasRef = useRef(null);
-  const [selectedNode, setSelectedNode] = useState(null);
-
-  useEffect(() => {
-    if (!mindmap || !canvasRef.current) return;
-    
-    // Canvas will be handled by SVG rendering
-  }, [mindmap]);
-
-  if (!mindmap) {
-    return (
-      <div className="h-96 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-        <p className="text-gray-500">No mindmap data available</p>
-      </div>
-    );
-  }
-
-  // Convert mindmap structure to drawable nodes
-  const getNodes = () => {
-    if (mindmap.nodes && mindmap.edges) {
-      return mindmap.nodes;
-    }
-    
-    // If mindmap has central_topic and branches structure
-    if (mindmap.central_topic && mindmap.branches) {
-      const nodes = [];
-      const centerX = 500;
-      const centerY = 300;
-      
-      // Central node
-      nodes.push({
-        id: 'center',
-        text: mindmap.central_topic,
-        x: centerX,
-        y: centerY,
-        level: 0
-      });
-      
-      // Branch nodes
-      const angleStep = (2 * Math.PI) / mindmap.branches.length;
-      mindmap.branches.forEach((branch, i) => {
-        const angle = i * angleStep;
-        const radius = 200;
-        const branchX = centerX + radius * Math.cos(angle);
-        const branchY = centerY + radius * Math.sin(angle);
-        
-        nodes.push({
-          id: `branch-${i}`,
-          text: branch.topic,
-          x: branchX,
-          y: branchY,
-          level: 1,
-          parentId: 'center'
-        });
-        
-        // Subtopics
-        if (branch.subtopics && branch.subtopics.length > 0) {
-          branch.subtopics.forEach((subtopic, j) => {
-            const subAngle = angle + (j - branch.subtopics.length / 2) * 0.3;
-            const subRadius = radius + 150;
-            const subX = centerX + subRadius * Math.cos(subAngle);
-            const subY = centerY + subRadius * Math.sin(subAngle);
-            
-            nodes.push({
-              id: `sub-${i}-${j}`,
-              text: typeof subtopic === 'string' ? subtopic : subtopic.text,
-              x: subX,
-              y: subY,
-              level: 2,
-              parentId: `branch-${i}`
-            });
-          });
-        }
-      });
-      
-      return nodes;
-    }
-    
-    return [];
-  };
-
-  const nodes = getNodes();
-
-  // Get connections between nodes
-  const getConnections = () => {
-    if (mindmap.edges) {
-      return mindmap.edges;
-    }
-    
-    // Create connections from parent relationships
-    const connections = [];
-    nodes.forEach(node => {
-      if (node.parentId) {
-        connections.push({
-          source: node.parentId,
-          target: node.id
-        });
-      }
-    });
-    
-    return connections;
-  };
-
-  const connections = getConnections();
-
-  const getNodeColor = (level) => {
-    switch (level) {
-      case 0: return '#3B82F6'; // blue-500
-      case 1: return '#8B5CF6'; // purple-500
-      case 2: return '#EC4899'; // pink-500
-      default: return '#6B7280'; // gray-500
-    }
-  };
-
-  const handleNodeClick = (node) => {
-    setSelectedNode(selectedNode?.id === node.id ? null : node);
-  };
+  const [focus, setFocus] = useState(null);
+  const { placed, rootY, height } = useMemo(() => layout(mindmap), [mindmap]);
+  const width = COL_X[2] + NODE_W[2] + PAD;
 
   return (
-    <div className="relative">
-      <svg 
-        ref={canvasRef}
-        className="w-full border-2 border-gray-200 rounded-lg bg-white"
-        viewBox="0 0 1000 600"
-        style={{ minHeight: '500px' }}
-      >
-        {/* Draw connections first (so they appear behind nodes) */}
-        {connections.map((conn, idx) => {
-          const sourceNode = nodes.find(n => n.id === conn.source);
-          const targetNode = nodes.find(n => n.id === conn.target);
-          
-          if (!sourceNode || !targetNode) return null;
-          
+    <div className="overflow-x-auto">
+      <svg viewBox={`${-PAD} 0 ${width + PAD} ${height}`} className="mx-auto block" style={{ minWidth: 760, width: '100%', maxHeight: '70vh' }}>
+        {placed.map((branch) => {
+          const dim = focus && focus !== branch.id;
           return (
-            <line
-              key={idx}
-              x1={sourceNode.x}
-              y1={sourceNode.y}
-              x2={targetNode.x}
-              y2={targetNode.y}
-              stroke="#D1D5DB"
-              strokeWidth="2"
-              className="transition-all"
-            />
-          );
-        })}
-        
-        {/* Draw nodes */}
-        {nodes.map((node) => {
-          const isSelected = selectedNode?.id === node.id;
-          const nodeColor = getNodeColor(node.level);
-          const fontSize = node.level === 0 ? 18 : node.level === 1 ? 14 : 12;
-          const radius = node.level === 0 ? 60 : node.level === 1 ? 50 : 40;
-          
-          return (
-            <g 
-              key={node.id}
-              className="cursor-pointer transition-transform hover:scale-110"
-              onClick={() => handleNodeClick(node)}
-            >
-              {/* Node circle */}
-              <circle
-                cx={node.x}
-                cy={node.y}
-                r={radius}
-                fill={isSelected ? nodeColor : 'white'}
-                stroke={nodeColor}
-                strokeWidth={isSelected ? 4 : 3}
-                className="transition-all"
-              />
-              
-              {/* Node text */}
-              <text
-                x={node.x}
-                y={node.y}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill={isSelected ? 'white' : nodeColor}
-                fontSize={fontSize}
-                fontWeight="600"
-                className="pointer-events-none select-none"
-              >
-                {node.text.length > 20 ? node.text.substring(0, 18) + '...' : node.text}
-              </text>
+            <g key={branch.id} className={`transition-opacity ${dim ? 'opacity-25' : ''}`}>
+              <path d={curve(COL_X[0] + NODE_W[0], rootY, COL_X[1], branch.y)} className="fill-none stroke-zinc-300 dark:stroke-zinc-600" strokeWidth="1.5" />
+              {branch.children.map((child) => (
+                <path key={child.id} d={curve(COL_X[1] + NODE_W[1], branch.y, COL_X[2], child.y)} className="fill-none stroke-zinc-200 dark:stroke-zinc-700" strokeWidth="1.25" />
+              ))}
             </g>
           );
         })}
+
+        <Node x={COL_X[0]} y={rootY} width={NODE_W[0]} level={0} text={mindmap.central_topic} onClick={() => setFocus(null)} />
+        {placed.map((branch) => (
+          <g key={branch.id}>
+            <Node
+              x={COL_X[1]}
+              y={branch.y}
+              width={NODE_W[1]}
+              level={1}
+              text={branch.text}
+              active={focus === branch.id}
+              dimmed={focus && focus !== branch.id}
+              onClick={() => setFocus(focus === branch.id ? null : branch.id)}
+            />
+            {branch.children.map((child) => (
+              <Node
+                key={child.id}
+                x={COL_X[2]}
+                y={child.y}
+                width={NODE_W[2]}
+                level={2}
+                text={child.text}
+                dimmed={focus && focus !== branch.id}
+                onClick={() => setFocus(branch.id)}
+              />
+            ))}
+          </g>
+        ))}
       </svg>
-      
-      {/* Selected node details */}
-      {selectedNode && (
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h4 className="font-semibold text-blue-900 mb-1">
-            {selectedNode.text}
-          </h4>
-          <p className="text-sm text-blue-700">
-            Level: {selectedNode.level === 0 ? 'Central Topic' : selectedNode.level === 1 ? 'Main Branch' : 'Subtopic'}
-          </p>
-        </div>
-      )}
-      
-      {/* Legend */}
-      <div className="mt-4 flex items-center justify-center space-x-6 text-sm">
-        <div className="flex items-center space-x-2">
-          <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-          <span className="text-gray-600">Central Topic</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <div className="w-4 h-4 rounded-full bg-purple-500"></div>
-          <span className="text-gray-600">Main Branches</span>
-        </div>
-        <div className="flex items-center space-x-2">
-          <div className="w-4 h-4 rounded-full bg-pink-500"></div>
-          <span className="text-gray-600">Subtopics</span>
-        </div>
-      </div>
+      <p className="muted mt-4 text-center text-xs">Click a branch to highlight it. Click the centre topic to reset.</p>
     </div>
   );
 };

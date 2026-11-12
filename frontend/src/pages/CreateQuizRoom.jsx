@@ -1,10 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { documentAPI, errorMessage, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
 import { useApp } from '../contexts/AppContext';
 import DocumentUpload from '../components/document/DocumentUpload';
+import Segmented from '../components/ui/Segmented';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+
+const Section = ({ title, description, children }) => (
+  <div className="grid gap-4 px-5 py-6 md:grid-cols-[220px_1fr] md:gap-8">
+    <div>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {description && <p className="muted mt-1 text-xs">{description}</p>}
+    </div>
+    <div className="space-y-5">{children}</div>
+  </div>
+);
 
 const CreateQuizRoom = () => {
   const navigate = useNavigate();
@@ -14,12 +26,14 @@ const CreateQuizRoom = () => {
   const [documents, setDocuments] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [documentId, setDocumentId] = useState(params.get('document') || '');
+  const [showUpload, setShowUpload] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [numQuestions, setNumQuestions] = useState(10);
   const [timePerQuestion, setTimePerQuestion] = useState(30);
   const [difficulty, setDifficulty] = useState('medium');
   const [maxParticipants, setMaxParticipants] = useState(20);
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     documentAPI
@@ -29,20 +43,11 @@ const CreateQuizRoom = () => {
       .finally(() => setLoadingDocs(false));
   }, []);
 
-  const handleUploaded = (doc) => {
-    setDocuments((prev) => [doc, ...prev]);
-    setDocumentId(doc._id);
-  };
-
-  const create = async () => {
-    if (!roomName.trim()) {
-      addNotification({ type: 'error', title: 'Name required', message: 'Give your room a name.' });
-      return;
-    }
-    if (!documentId) {
-      addNotification({ type: 'error', title: 'Document required', message: 'Questions are generated from a document.' });
-      return;
-    }
+  const create = async (e) => {
+    e.preventDefault();
+    if (!roomName.trim()) return setError('Give the quiz a name.');
+    if (!documentId) return setError('Choose the document the questions should come from.');
+    setError(null);
     setCreating(true);
     try {
       const res = await roomAPI.create({
@@ -55,131 +60,112 @@ const CreateQuizRoom = () => {
       });
       const { room_id, room_code, participant_id, participant_token } = res.data;
       roomIdentity.save(room_id, { participant_id, participant_token, is_host: true });
-      addNotification({ type: 'success', title: 'Room created', message: `Share code ${room_code}` });
+      addNotification({ type: 'success', title: 'Quiz created', message: `Share code ${room_code} with your players.` });
       navigate(`/room/${room_id}`);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not create room', message: errorMessage(error) });
+    } catch (err) {
+      setError(errorMessage(err, 'Could not create the quiz'));
     } finally {
       setCreating(false);
     }
+    return undefined;
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Host a live quiz</h1>
-        <p className="text-gray-600">Players join with a code. You control the pace question by question.</p>
-      </div>
+    <div className="mx-auto max-w-4xl">
+      <Link to="/study-rooms" className="muted mb-4 inline-flex items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-zinc-100">
+        <ChevronLeft className="h-4 w-4" />
+        Live quizzes
+      </Link>
+      <h1 className="text-2xl font-semibold tracking-tight">Host a live quiz</h1>
+      <p className="muted mt-1.5 text-sm">Players join with a code. You control the pace, one question at a time.</p>
 
-      <div className="bg-white rounded-2xl shadow-xl p-8 space-y-8">
-        <div>
-          <label htmlFor="room-name" className="block text-sm font-medium text-gray-700 mb-2">Room name</label>
-          <input
-            id="room-name"
-            value={roomName}
-            onChange={(e) => setRoomName(e.target.value)}
-            placeholder="e.g. Friday biology revision"
-            maxLength={60}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          />
-        </div>
+      <form onSubmit={create} className="card mt-8 divide-y divide-zinc-200 dark:divide-zinc-800">
+        {error && (
+          <div className="p-5">
+            <div className="alert alert-danger">{error}</div>
+          </div>
+        )}
+        <Section title="Basics" description="What players will see when they join.">
+          <div>
+            <label htmlFor="room-name" className="label">Quiz name</label>
+            <input id="room-name" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="Friday biology revision" maxLength={60} className="input" />
+          </div>
+          <div>
+            <label htmlFor="document" className="label">Source document</label>
+            {loadingDocs ? (
+              <LoadingSpinner size="small" className="justify-start" />
+            ) : (
+              <select id="document" value={documentId} onChange={(e) => setDocumentId(e.target.value)} className="input">
+                <option value="">Choose a document</option>
+                {documents.map((doc) => (
+                  <option key={doc._id} value={doc._id}>{doc.filename}</option>
+                ))}
+              </select>
+            )}
+            <button type="button" onClick={() => setShowUpload((v) => !v)} className="mt-2 text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400">
+              {showUpload ? 'Hide upload' : 'Or upload a new document'}
+            </button>
+            {showUpload && (
+              <div className="mt-3">
+                <DocumentUpload
+                  compact
+                  onUpload={(doc) => {
+                    setDocuments((prev) => [doc, ...prev]);
+                    setDocumentId(doc._id);
+                    setShowUpload(false);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </Section>
 
-        <div>
-          <label htmlFor="document" className="block text-sm font-medium text-gray-700 mb-2">Source document</label>
-          {loadingDocs ? (
-            <LoadingSpinner size="small" />
-          ) : (
-            <select
-              id="document"
-              value={documentId}
-              onChange={(e) => setDocumentId(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">Choose a document…</option>
-              {documents.map((doc) => (
-                <option key={doc._id} value={doc._id}>{doc.filename}</option>
-              ))}
-            </select>
-          )}
-          <details className="mt-3">
-            <summary className="text-sm text-primary-600 cursor-pointer">Or upload a new document</summary>
-            <div className="mt-3">
-              <DocumentUpload onUpload={handleUploaded} />
+        <Section title="Questions" description="Generated from the document when you open the lobby.">
+          <div>
+            <div className="mb-1.5 flex justify-between text-sm">
+              <label htmlFor="num-questions" className="font-medium text-zinc-700 dark:text-zinc-300">Number of questions</label>
+              <span className="font-medium tabular-nums">{numQuestions}</span>
             </div>
-          </details>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Questions: <span className="text-primary-600 font-bold">{numQuestions}</span>
-          </label>
-          <input type="range" min="3" max="25" value={numQuestions} onChange={(e) => setNumQuestions(Number(e.target.value))} className="w-full" />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Time per question</label>
-          <div className="flex flex-wrap gap-2">
-            {[10, 15, 20, 30, 45, 60].map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTimePerQuestion(t)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  timePerQuestion === t ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {t}s
-              </button>
-            ))}
+            <input id="num-questions" type="range" min="3" max="25" value={numQuestions} onChange={(e) => setNumQuestions(Number(e.target.value))} className="w-full" />
           </div>
-        </div>
+          <Segmented
+            id="time-label"
+            label="Time per question"
+            value={timePerQuestion}
+            onChange={setTimePerQuestion}
+            options={[10, 15, 20, 30, 45, 60].map((t) => ({ value: t, label: `${t}s` }))}
+          />
+          <Segmented
+            id="difficulty-label"
+            label="Difficulty"
+            value={difficulty}
+            onChange={setDifficulty}
+            options={[
+              { value: 'easy', label: 'Easy' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'hard', label: 'Hard' },
+            ]}
+          />
+        </Section>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { value: 'easy', label: 'Easy', emoji: '😊', active: 'border-green-500 bg-green-50' },
-              { value: 'medium', label: 'Medium', emoji: '🎯', active: 'border-yellow-500 bg-yellow-50' },
-              { value: 'hard', label: 'Hard', emoji: '🔥', active: 'border-red-500 bg-red-50' },
-            ].map((level) => (
-              <button
-                key={level.value}
-                type="button"
-                onClick={() => setDifficulty(level.value)}
-                className={`p-4 rounded-lg border-2 transition-all ${difficulty === level.value ? level.active : 'border-gray-200 hover:border-gray-300'}`}
-              >
-                <div className="text-3xl mb-1">{level.emoji}</div>
-                <div className="font-semibold">{level.label}</div>
-              </button>
-            ))}
+        <Section title="Players">
+          <div>
+            <div className="mb-1.5 flex justify-between text-sm">
+              <label htmlFor="max-players" className="font-medium text-zinc-700 dark:text-zinc-300">Maximum players</label>
+              <span className="font-medium tabular-nums">{maxParticipants}</span>
+            </div>
+            <input id="max-players" type="range" min="2" max="100" value={maxParticipants} onChange={(e) => setMaxParticipants(Number(e.target.value))} className="w-full" />
           </div>
-        </div>
+        </Section>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Max players: <span className="text-primary-600 font-bold">{maxParticipants}</span>
-          </label>
-          <input type="range" min="2" max="100" value={maxParticipants} onChange={(e) => setMaxParticipants(Number(e.target.value))} className="w-full" />
-        </div>
-
-        <div className="flex space-x-4 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate('/study-rooms')}
-            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={create}
-            disabled={creating}
-            className="flex-1 bg-primary-600 text-white py-3 rounded-lg font-semibold hover:bg-primary-700 disabled:opacity-50 transition-colors"
-          >
-            {creating ? 'Creating…' : 'Create room'}
+        <div className="flex justify-end gap-2 bg-zinc-50 px-5 py-4 dark:bg-zinc-900/60">
+          <Link to="/study-rooms" className="btn btn-ghost">Cancel</Link>
+          <button type="submit" disabled={creating} className="btn btn-primary">
+            {creating ? <LoadingSpinner size="small" /> : null}
+            Create quiz
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 };

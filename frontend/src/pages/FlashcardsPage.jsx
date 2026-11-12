@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import { Layers, RefreshCw } from 'lucide-react';
 import { errorMessage, flashcardsAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
+import DocumentLayout from '../components/document/DocumentLayout';
 import FlashcardDeck from '../components/flashcards/FlashcardDeck';
-import LoadingSpinner from '../components/common/LoadingSpinner';
-
-const withIds = (cards) => cards.map((card, index) => ({ ...card, id: card.id ?? index }));
+import EmptyState from '../components/ui/EmptyState';
+import { PageLoader } from '../components/common/LoadingSpinner';
 
 const FlashcardsPage = () => {
   const { id: documentId } = useParams();
-  const navigate = useNavigate();
   const { addNotification } = useApp();
   const [flashcards, setFlashcards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +19,7 @@ const FlashcardsPage = () => {
   const load = useCallback(async () => {
     try {
       const res = await flashcardsAPI.getFlashcards(documentId);
-      setFlashcards(withIds(res.data.flashcards || []));
+      setFlashcards(res.data.flashcards || []);
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not load flashcards', message: errorMessage(error) });
     } finally {
@@ -35,81 +35,57 @@ const FlashcardsPage = () => {
     setGenerating(true);
     try {
       const res = await flashcardsAPI.generate({ document_id: documentId, num_cards: numCards });
-      setFlashcards(withIds(res.data.flashcards || []));
-      addNotification({ type: 'success', title: 'Flashcards ready', message: `${res.data.flashcards.length} cards generated` });
+      setFlashcards(res.data.flashcards || []);
     } catch (error) {
-      addNotification({ type: 'error', title: 'Generation failed', message: errorMessage(error) });
+      addNotification({ type: 'error', title: 'Could not generate flashcards', message: errorMessage(error) });
     } finally {
       setGenerating(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <LoadingSpinner size="large" />
+  let body;
+  if (loading) body = <PageLoader />;
+  else if (generating) body = <PageLoader label="Writing flashcards from your document…" />;
+  else if (flashcards.length === 0) {
+    body = (
+      <div className="card">
+        <EmptyState
+          icon={Layers}
+          title="No flashcards yet"
+          description="Generate a deck from this document. Each card notes the page it came from."
+          action={
+            <div className="flex items-center gap-2">
+              <select
+                value={numCards}
+                onChange={(e) => setNumCards(Number(e.target.value))}
+                className="input w-auto"
+                aria-label="Number of cards"
+              >
+                {[5, 10, 15, 20, 30].map((n) => (
+                  <option key={n} value={n}>{n} cards</option>
+                ))}
+              </select>
+              <button type="button" onClick={generate} className="btn btn-primary">Generate deck</button>
+            </div>
+          }
+        />
       </div>
+    );
+  } else {
+    body = (
+      <>
+        <FlashcardDeck flashcards={flashcards} />
+        <div className="mt-10 text-center">
+          <button type="button" onClick={generate} className="btn btn-ghost btn-sm">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Generate a fresh deck
+          </button>
+        </div>
+      </>
     );
   }
 
-  if (flashcards.length === 0) {
-    return (
-      <div className="max-w-2xl mx-auto text-center py-12">
-        <div className="text-5xl mb-4">🗂️</div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">No flashcards yet</h3>
-        <p className="text-gray-600 mb-6">Generate a deck from this document. Each card notes the page it came from.</p>
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <label htmlFor="num-cards" className="text-sm text-gray-700">Cards</label>
-          <select
-            id="num-cards"
-            value={numCards}
-            onChange={(e) => setNumCards(Number(e.target.value))}
-            className="border border-gray-300 rounded-md px-3 py-2"
-          >
-            {[5, 10, 15, 20, 30].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </div>
-        <div className="space-x-4">
-          <button
-            type="button"
-            onClick={generate}
-            disabled={generating}
-            className="bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
-          >
-            {generating ? 'Generating…' : 'Generate flashcards'}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard')}
-            className="bg-gray-600 text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors"
-          >
-            Back to dashboard
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Flashcards</h1>
-        <p className="text-gray-600 mb-4">Flip each card to check yourself. {flashcards.length} cards in this deck.</p>
-        <button
-          type="button"
-          onClick={generate}
-          disabled={generating}
-          className="text-sm text-primary-600 hover:underline disabled:opacity-50"
-        >
-          {generating ? 'Generating a new deck…' : 'Generate a fresh deck'}
-        </button>
-      </div>
-
-      <FlashcardDeck flashcards={flashcards} />
-    </div>
-  );
+  return <DocumentLayout>{body}</DocumentLayout>;
 };
 
 export default FlashcardsPage;

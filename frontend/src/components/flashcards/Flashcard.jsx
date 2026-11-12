@@ -1,64 +1,35 @@
 import React from 'react';
 
-const Flashcard = ({ card, showAnswer, onFlip, isKnown }) => {
-  // Support both front/back and question/answer formats
-  const question = card.front || card.question || 'No question';
-  const answer = card.back || card.answer || 'No answer';
-  
-  return (
-    <div 
-      className="perspective-1000 cursor-pointer"
-      onClick={onFlip}
-    >
-      <div
-        className={`relative w-full h-64 transition-all duration-500 ${
-          showAnswer ? 'rotate-y-180' : ''
-        }`}
-        style={{ 
-          transformStyle: 'preserve-3d',
-          transform: showAnswer ? 'rotateY(180deg)' : 'rotateY(0deg)'
-        }}
-      >
-        {/* Front of card */}
-        <div
-          className={`absolute inset-0 w-full h-full rounded-xl border-2 p-6 flex flex-col justify-center items-center ${
-            isKnown ? 'bg-green-50 border-green-500' : 'bg-white border-gray-300'
-          }`}
-          style={{ backfaceVisibility: 'hidden' }}
-        >
-          {isKnown && (
-            <div className="absolute top-3 right-3 bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-              Known
-            </div>
-          )}
-          <div className="text-center">
-            <div className="text-gray-500 text-sm mb-2">Question</div>
-            <h3 className="text-xl font-semibold text-gray-900">{question}</h3>
-            <div className="mt-4 text-sm text-gray-500">
-              Click to reveal answer
-            </div>
-          </div>
-        </div>
+const Face = ({ label, children, footer, back }) => (
+  <div
+    className={`flip-face absolute inset-0 flex flex-col rounded-2xl border p-8 shadow-sm ${
+      back
+        ? 'flip-back border-primary-200 bg-primary-50/60 dark:border-primary-500/30 dark:bg-zinc-900'
+        : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
+    }`}
+  >
+    <span className="eyebrow">{label}</span>
+    <div className="flex flex-1 items-center justify-center overflow-y-auto py-4 text-center">{children}</div>
+    <div className="muted text-center text-xs">{footer}</div>
+  </div>
+);
 
-        {/* Back of card */}
-        <div
-          className="absolute inset-0 w-full h-full rounded-xl border-2 border-primary-200 bg-primary-50 p-6 flex flex-col justify-center items-center"
-          style={{ 
-            backfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)'
-          }}
-        >
-          <div className="text-center">
-            <div className="text-primary-600 text-sm mb-2">Answer</div>
-            <h3 className="text-xl font-semibold text-gray-900">{answer}</h3>
-            <div className="mt-4 text-sm text-primary-600">
-              Click to see question
-            </div>
-          </div>
-        </div>
-      </div>
+const Flashcard = ({ card, showAnswer, onFlip }) => (
+  <button
+    type="button"
+    onClick={onFlip}
+    className="flip-scene block w-full rounded-2xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-4 dark:focus-visible:ring-offset-zinc-950"
+    aria-label={showAnswer ? 'Show question' : 'Show answer'}
+  >
+    <div className={`flip-card relative h-72 w-full ${showAnswer ? 'is-flipped' : ''}`}>
+      <Face label="Question" footer="Click or press Space to reveal">
+        <p className="text-xl font-medium leading-relaxed text-zinc-900 dark:text-zinc-50">{card.front}</p>
+      </Face>
+      <Face back label="Answer" footer={card.source_page ? `From page ${card.source_page}` : 'Click to flip back'}>
+        <p className="text-base leading-relaxed text-zinc-800 dark:text-zinc-200">{card.back}</p>
+      </Face>
     </div>
-  );
-};
+  </button>
+);
 
 export default Flashcard;

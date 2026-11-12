@@ -59,7 +59,9 @@ def public_room(room: dict) -> dict:
     """Room as sent to clients: no tokens, no correct answers."""
     out = {k: v for k, v in room.items() if k not in ("_id", "questions")}
     out["participants"] = [{k: v for k, v in p.items() if k != "token"} for p in room.get("participants", [])]
-    out["questions"] = [public_question(q) for q in room.get("questions", [])]
+    # Correct answers stay server-side while the quiz runs; once it is over they are shown for review.
+    finished = room.get("quiz_state") == "completed"
+    out["questions"] = [dict(q) if finished else public_question(q) for q in room.get("questions", [])]
     out["question_count"] = len(room.get("questions", []))
     for key in ("created_at", "question_started_at", "started_at", "completed_at", "ended_at"):
         if isinstance(out.get(key), datetime):

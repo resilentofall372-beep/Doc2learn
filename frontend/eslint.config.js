@@ -23,12 +23,17 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
     },
   },
   {
     // Context modules export a provider plus its hook by design.
-    files: ['src/contexts/**/*.jsx'],
+    files: [
+      'src/contexts/**/*.jsx',
+      'src/components/ui/Avatar.jsx',
+      'src/components/common/LoadingSpinner.jsx',
+      'src/components/document/DocumentLayout.jsx',
+    ],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
 ])

@@ -49,7 +49,7 @@ def test_rejects_bad_uploads(client, auth):
         content_type="multipart/form-data",
     )
     assert res.status_code == 201
-    assert res.get_json()["document"]["filename"] == "etc_passwd.txt"
+    assert res.get_json()["document"]["filename"] == "passwd.txt"
 
 
 def test_retrieval_finds_relevant_chunk(app, document):

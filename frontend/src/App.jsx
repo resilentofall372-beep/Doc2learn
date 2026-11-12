@@ -6,7 +6,7 @@ import { SocketProvider } from './contexts/SocketContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Layout from './components/common/Layout';
 import ProtectedRoute from './components/common/ProtectedRoute';
-import LoadingSpinner from './components/common/LoadingSpinner';
+import { PageLoader } from './components/common/LoadingSpinner';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
@@ -23,18 +23,14 @@ import NotFound from './pages/NotFound';
 // Pages only for signed-out visitors (login, signup).
 const PublicRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="large" />
-      </div>
-    );
-  }
+  if (loading) return <PageLoader />;
   return !isAuthenticated ? children : <Navigate to="/dashboard" replace />;
 };
 
-const protectedPage = (element, { layout = true } = {}) => (
-  <ProtectedRoute>{layout ? <Layout>{element}</Layout> : element}</ProtectedRoute>
+const protectedPage = (element) => (
+  <ProtectedRoute>
+    <Layout>{element}</Layout>
+  </ProtectedRoute>
 );
 
 function App() {
@@ -44,18 +40,18 @@ function App() {
         <AppProvider>
           <Router>
             <Routes>
-              <Route path="/login" element={<PublicRoute><Layout><Login /></Layout></PublicRoute>} />
-              <Route path="/signup" element={<PublicRoute><Layout><Signup /></Layout></PublicRoute>} />
+              <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+              <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
 
               <Route path="/dashboard" element={protectedPage(<Dashboard />)} />
+              <Route path="/document/:documentId/chat" element={protectedPage(<ChatPage />)} />
               <Route path="/document/:id/quiz" element={protectedPage(<QuizPage />)} />
               <Route path="/document/:id/flashcards" element={protectedPage(<FlashcardsPage />)} />
               <Route path="/document/:id/mindmap" element={protectedPage(<MindMapPage />)} />
-              <Route path="/document/:documentId/chat" element={protectedPage(<ChatPage />, { layout: false })} />
               <Route path="/study-rooms" element={protectedPage(<StudyRooms />)} />
               <Route path="/create-quiz-room" element={protectedPage(<CreateQuizRoom />)} />
 
-              {/* Guests can join a room by code without an account. */}
+              {/* Guests can join a live quiz by code without an account. */}
               <Route path="/join/:roomCode" element={<Layout><JoinRoom /></Layout>} />
               <Route
                 path="/room/:id"
