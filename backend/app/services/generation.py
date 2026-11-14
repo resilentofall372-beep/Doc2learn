@@ -289,11 +289,43 @@ Excerpts:
 
 
 # --------------------------------------------------------------------------- concept map
-def generate_mindmap(scope: dict, title: str) -> dict:
-    context, _ = retrieval.spread_context(scope, max_chars=7000)
+def _concept(raw) -> dict | None:
+    """A concept node from either {"label", "note"} or a bare string (older maps)."""
+    if isinstance(raw, str):
+        label, note = raw, ""
+    elif isinstance(raw, dict):
+        label, note = raw.get("label") or raw.get("text") or "", raw.get("note") or ""
+    else:
+        return None
+    label = str(label).strip()[:80]
+    return {"label": label, "note": str(note).strip()[:200]} if label else None
+
+
+def generate_mindmap(scope: dict, title: str, topics: list[dict] | None = None) -> dict:
+    """A concept map: a central idea, branches with concepts (each with a one-line note),
+    and cross-links between related concepts in different branches.
+
+    With `topics` (the project outline) the branches are exactly those topics, in order,
+    and each branch carries its `topic_id`, so the map can show progress per topic.
+    """
+    context, _ = retrieval.spread_context(scope, max_chars=9000)
+    if topics:
+        menu = "\n".join(f"{i}. {t['title']}" for i, t in enumerate(topics, start=1))
+        branch_rule = f"""Use exactly these topics as the branches, in this order (one branch each, "topic" = its number):
+{menu}"""
+        topic_field = "int"
+    else:
+        branch_rule = "Use 3-7 branches for the main themes, in a sensible learning order."
+        topic_field = "str"
     prompt = f"""Build a concept map of {_scope_phrase(scope)} from the excerpts.
-Return JSON: {{"central_topic": str, "branches": [{{"topic": str, "subtopics": [str, ...]}}]}}
-Use 3-6 branches with 2-5 short subtopics each (under 8 words). Use the material's own terminology.
+{branch_rule}
+- Each branch has a one-sentence "note" (under 20 words) and 2-6 "concepts": the key ideas, terms or steps in it.
+- Each concept has a short "label" (under 6 words, the material's own terminology) and a "note": what it is, in under 15 words.
+- "links" connects up to 6 pairs of related concepts that sit in DIFFERENT branches; "label" says how they relate (2-4 words,
+  e.g. "produces", "is a type of", "depends on"). Use concept labels exactly as written.
+
+Return JSON: {{"central_topic": str, "branches": [{{"topic": {topic_field}, "note": str, "concepts": [{{"label": str, "note": str}}]}}],
+"links": [{{"from": str, "to": str, "label": str}}]}}
 
 Excerpts:
 {context}"""
@@ -303,12 +335,42 @@ Excerpts:
     )
     if not isinstance(data, dict):
         data = {}
+
     branches = []
-    for raw in _as_list(data.get("branches"), 8):
-        if isinstance(raw, dict) and raw.get("topic"):
-            subs = [str(s).strip() for s in _as_list(raw.get("subtopics"), 6) if str(s).strip()]
-            branches.append({"topic": str(raw["topic"]).strip(), "subtopics": subs})
-    return {"central_topic": str(data.get("central_topic") or title).strip(), "branches": branches}
+    for raw in _as_list(data.get("branches"), 12):
+        if not isinstance(raw, dict):
+            continue
+        name, topic_id = raw.get("topic"), None
+        if topics and isinstance(name, (int, float)) and 1 <= int(name) <= len(topics):
+            topic = topics[int(name) - 1]
+            name, topic_id = topic["title"], topic["id"]
+        elif topics and isinstance(name, str):
+            match = next((t for t in topics if t["title"].lower() == name.strip().lower()), None)
+            topic_id = match["id"] if match else None
+        name = str(name or "").strip()[:80]
+        if not name:
+            continue
+        concepts = [c for c in (_concept(x) for x in _as_list(raw.get("concepts") or raw.get("subtopics"), 8)) if c]
+        branches.append(
+            {
+                "topic": name,
+                "topic_id": topic_id,
+                "note": str(raw.get("note") or "").strip()[:200],
+                "concepts": concepts,
+                "subtopics": [c["label"] for c in concepts],  # older clients read this
+            }
+        )
+
+    labels = {c["label"].lower(): c["label"] for b in branches for c in b["concepts"]}
+    links = []
+    for raw in _as_list(data.get("links"), 10):
+        if not isinstance(raw, dict):
+            continue
+        a, b = labels.get(str(raw.get("from", "")).strip().lower()), labels.get(str(raw.get("to", "")).strip().lower())
+        if a and b and a != b:
+            links.append({"from": a, "to": b, "label": str(raw.get("label") or "").strip()[:40]})
+
+    return {"central_topic": str(data.get("central_topic") or title).strip()[:80], "branches": branches, "links": links[:6]}
 
 
 # --------------------------------------------------------------------------- chat

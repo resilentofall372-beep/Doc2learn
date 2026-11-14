@@ -267,7 +267,9 @@ def generate_mindmap():
     if scope["document_id"]:
         title = owned_document(scope["document_id"], {"filename": 1}).get("filename", title)
 
-    mindmap = generation.generate_mindmap(_scope_args(scope), title)
+    # A whole-project map follows the topic outline, so its branches line up with progress.
+    topics = None if scope["document_id"] else topic_list(scope["project_id"], g.user_id) or None
+    mindmap = generation.generate_mindmap(_scope_args(scope), title, topics)
     if not mindmap.get("branches"):
         raise ApiError("The model did not produce a usable concept map. Try again.", 502)
 

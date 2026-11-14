@@ -99,6 +99,17 @@ def test_edit_outline_and_delete_document(client, document):
     assert [t["title"] for t in left] == ["My own topic"]
 
 
+def test_concept_map_follows_the_outline(client, document):
+    headers, _, _, project_id = document
+    topics = client.post("/api/topics/build", json={"project_id": project_id}, headers=headers).get_json()["outline"]["topics"]
+    mindmap = client.post("/api/document/generate-mindmap", json={"project_id": project_id}, headers=headers).get_json()["mindmap"]
+    branch = mindmap["branches"][0]
+    assert branch["topic"] == "Light reactions" and branch["topic_id"] == topics[0]["id"]
+    # Older "subtopics" strings become concepts with empty notes.
+    assert branch["concepts"] == [{"label": "ATP", "note": ""}, {"label": "NADPH", "note": ""}]
+    assert mindmap["links"] == []
+
+
 def test_not_covered_answers_are_low_confidence():
     from app.services.generation import _confidence
 

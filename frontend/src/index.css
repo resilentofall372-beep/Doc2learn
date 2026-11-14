@@ -139,6 +139,14 @@
   }
 }
 
+/* Behind text drawn on the concept map, so link labels stay readable over lines */
+:root {
+  --map-bg: #ffffff;
+}
+.dark {
+  --map-bg: #18181b;
+}
+
 /* Horizontal strips (project tabs) that scroll on small screens without showing a scrollbar */
 .no-scrollbar {
   scrollbar-width: none;
