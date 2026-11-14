@@ -22,7 +22,7 @@ const Flashcard = ({ card, showAnswer, onFlip }) => (
     aria-label={showAnswer ? 'Show question' : 'Show answer'}
   >
     <div className={`flip-card relative h-72 w-full ${showAnswer ? 'is-flipped' : ''}`}>
-      <Face label="Question" footer="Click or press Space to reveal">
+      <Face label={card.topic_title ? `Question · ${card.topic_title}` : 'Question'} footer="Click or press Space to reveal">
         <p className="text-xl font-medium leading-relaxed text-zinc-900 dark:text-zinc-50">{card.front}</p>
       </Face>
       <Face

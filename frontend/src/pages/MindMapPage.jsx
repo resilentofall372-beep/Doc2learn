@@ -6,6 +6,8 @@ import { useApp } from '../contexts/AppContext';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
 import MindMapCanvas from '../components/mindmap/MindMapCanvas';
+import StaleNotice from '../components/projects/StaleNotice';
+import { newerDocuments } from '../utils/time';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner, { PageLoader } from '../components/common/LoadingSpinner';
 
@@ -15,6 +17,7 @@ const ConceptMap = ({ projectId, documents }) => {
   const wanted = params.get('document');
   const documentId = documents.some((d) => d._id === wanted) ? wanted : '';
   const [mindmap, setMindmap] = useState(null);
+  const [generatedAt, setGeneratedAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 
@@ -25,6 +28,7 @@ const ConceptMap = ({ projectId, documents }) => {
     try {
       const res = await mindmapAPI.getMindmap(projectId, documentId || null);
       setMindmap(res.data.mindmap);
+      setGeneratedAt(res.data.generated_at || null);
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not load concept map', message: errorMessage(error) });
     } finally {
@@ -41,6 +45,7 @@ const ConceptMap = ({ projectId, documents }) => {
     try {
       const res = await mindmapAPI.generate({ projectId, documentId: documentId || null });
       setMindmap(res.data.mindmap);
+      setGeneratedAt(res.data.generated_at || new Date().toISOString());
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not generate concept map', message: errorMessage(error) });
     } finally {
@@ -78,9 +83,16 @@ const ConceptMap = ({ projectId, documents }) => {
     );
   }
 
+  const missing = documentId ? [] : newerDocuments(documents, generatedAt);
+
   return (
     <>
       {picker}
+      {missing.length > 0 && (
+        <div className="mb-6">
+          <StaleNotice what="map" documents={missing} onRegenerate={generate} busy={generating} />
+        </div>
+      )}
       <section className="card">
         <div className="card-header py-3">
           <h2 className="card-title">{mindmap.central_topic}</h2>

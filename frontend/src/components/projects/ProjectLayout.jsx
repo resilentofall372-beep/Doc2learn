@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
-import { ChevronLeft, FileText, FolderOpen, Layers, ListChecks, MessageSquareText, Network, Radio, Upload } from 'lucide-react';
+import { ChevronLeft, FileText, FolderOpen, Layers, ListChecks, ListTree, MessageSquareText, Network, Plus, Radio, Upload } from 'lucide-react';
 import { errorMessage, projectAPI } from '../../services/api';
 import { colorFor } from '../ui/Avatar';
 import EmptyState from '../ui/EmptyState';
 import { PageLoader } from '../common/LoadingSpinner';
+import AddDocumentsDialog from '../document/AddDocumentsDialog';
 
 const TABS = [
   { path: '', label: 'Documents', icon: FileText, end: true },
+  { path: '/topics', label: 'Topics', icon: ListTree },
   { path: '/tutor', label: 'Tutor', icon: MessageSquareText },
   { path: '/quiz', label: 'Quiz', icon: ListChecks },
   { path: '/flashcards', label: 'Flashcards', icon: Layers },
@@ -21,13 +23,15 @@ export const forgetProject = (projectId) => cache.delete(projectId);
 
 /**
  * Header and tabs for every page inside a project.
- * `children` may be a node, or a function receiving { project, documents, setDocuments, refresh }.
+ * `children` may be a node, or a function receiving
+ * { project, documents, setDocuments, refresh, addDocuments } (addDocuments opens the upload dialog).
  * Study tabs (needsDocuments) show a prompt to upload first when the project is empty.
  */
 const ProjectLayout = ({ children, needsDocuments = true }) => {
   const { projectId } = useParams();
   const [data, setData] = useState(() => cache.get(projectId) || null);
   const [error, setError] = useState(null);
+  const [adding, setAdding] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -58,6 +62,10 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
     },
     [projectId]
   );
+
+  const addDocuments = useCallback(() => setAdding(true), []);
+  const closeAdding = useCallback(() => setAdding(false), []);
+  const appendDocument = useCallback((doc) => setDocuments((prev) => [...prev, doc]), [setDocuments]);
 
   if (error && !data) {
     return (
@@ -97,12 +105,18 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
             </p>
           </div>
         </div>
-        {documents.length > 0 && (
-          <Link to={`/create-quiz-room?project=${projectId}`} className="btn btn-secondary flex-shrink-0">
-            <Radio className="h-4 w-4" />
-            Host live quiz
-          </Link>
-        )}
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+          {documents.length > 0 && (
+            <Link to={`/create-quiz-room?project=${projectId}`} className="btn btn-secondary">
+              <Radio className="h-4 w-4" />
+              Host live quiz
+            </Link>
+          )}
+          <button type="button" onClick={addDocuments} className="btn btn-primary">
+            <Plus className="h-4 w-4" />
+            Add documents
+          </button>
+        </div>
       </div>
 
       <nav className="-mx-1 mt-6 flex gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800" aria-label="Project sections">
@@ -131,16 +145,29 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
             <EmptyState
               icon={Upload}
               title="Add a document first"
-              description="Upload notes, slides or a chapter to this project, then come back to study it."
-              action={<Link to={base} className="btn btn-primary">Go to documents</Link>}
+              description="Upload notes, slides or a chapter to this project (or paste text), then study it here."
+              action={
+                <button type="button" onClick={addDocuments} className="btn btn-primary">
+                  <Plus className="h-4 w-4" />
+                  Add documents
+                </button>
+              }
             />
           </div>
         ) : typeof children === 'function' ? (
-          children({ project, documents, setDocuments, refresh })
+          children({ project, documents, setDocuments, refresh, addDocuments })
         ) : (
           children
         )}
       </div>
+
+      <AddDocumentsDialog
+        open={adding}
+        projectId={projectId}
+        title={`Add documents to ${project.name}`}
+        onUpload={appendDocument}
+        onClose={closeAdding}
+      />
     </div>
   );
 };

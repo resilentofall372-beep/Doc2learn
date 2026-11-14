@@ -2,8 +2,9 @@
 
 Turn your own study material into a tutor that stays honest.
 
-Create a **project** for each subject, upload your lecture notes, chapters or slides into it, and Doc2Learn gives you:
+Create a **project** for each subject, upload your lecture notes, chapters or slides into it (several files at once, or pasted text), and Doc2Learn gives you:
 
+- **A topic outline** that splits the project into topics in learning order. You can edit it, and it grows as you add documents. Every quiz question and flashcard is labelled with its topic, and each topic has its own quiz and deck.
 - **A grounded study tutor** that searches every document in the project, cites the file and page it used, and says plainly when your documents do not cover a question instead of guessing.
 - **Quizzes** at three difficulty levels, across the whole project or one document, graded on the server with an explanation and source for every question.
 - **Flashcards** and a **concept map**, for the whole project or one document.
@@ -29,7 +30,7 @@ These are deliberate starting points for studying how learners calibrate trust i
 ## How it fits together
 
 ```
-Home page ─▶ Log in / Sign up ─▶ Projects ─▶ a project: Documents · Tutor · Quiz · Flashcards · Concept map
+Home page ─▶ Log in / Sign up ─▶ Projects ─▶ a project: Documents · Topics · Tutor · Quiz · Flashcards · Concept map
 
 React (Vite, Tailwind)  ──/api──▶  Flask API  ──▶  MongoDB
         │                              │
@@ -61,7 +62,8 @@ MongoDB, database `doc2learn`. Every row a user owns carries `user_id`, and proj
 | `documents` | `user_id`, `project_id`, file name and type, extracted text with page boundaries, chunk count |
 | `chunks` | `project_id`, `document_id`, file name, text, page, embedding (for search) |
 | `quizzes`, `quiz_attempts` | generated questions; graded attempts with score and time. `document_id: null` means the whole project |
-| `flashcards`, `mindmaps` | generated decks and concept maps, per project or per document |
+| `flashcards`, `mindmaps` | generated decks and concept maps, per project or per document (decks also per topic) |
+| `topics` | one outline per project: ordered topics (stable `id`, title, summary, key ideas, source pages) and the documents already read into it |
 | `chat_sessions` | one tutor conversation per user and project |
 | `rooms` | live quiz rooms, their players and questions |
 
@@ -69,6 +71,7 @@ MongoDB, database `doc2learn`. Every row a user owns carries `user_id`, and proj
 user ─┬─< project ─┬─< document ─< chunk
       │            ├─< quiz ─< quiz_attempt
       │            ├─< flashcards, mindmaps
+      │            ├── topics (outline; questions and cards point at a topic id)
       │            └─< chat_session
       └─< room (as host)
 ```
@@ -154,12 +157,12 @@ backend/
   app/
     access.py      ownership checks (projects, documents)
     migrations.py  start-up data migrations
-    routes/        auth, projects, documents, quiz, flashcards, mindmap, assistant, rooms, stats
+    routes/        auth, projects, documents, topics, quiz, flashcards, mindmap, assistant, rooms, stats
     services/      llm, extract, retrieval, generation, rooms
     sockets.py     live room events
   tests/
 frontend/
-  src/pages        Home, Login, Signup, Projects, ProjectDocuments, Chat, Quiz, Flashcards, MindMap, rooms
+  src/pages        Home, Login, Signup, Projects, ProjectDocuments, Topics, Chat, Quiz, Flashcards, MindMap, rooms
   src/components   projects/, document/, assistant/, quiz/, flashcards/, mindmap/, room/, ui/, common/
   src/services/api.js
 docker-compose.yml

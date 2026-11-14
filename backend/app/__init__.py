@@ -48,6 +48,7 @@ def create_app(config: type[Config] | None = None, db=None) -> Flask:
     from .routes.assistant import bp as assistant_bp
     from .routes.rooms import bp as rooms_bp
     from .routes.stats import bp as stats_bp
+    from .routes.topics import bp as topics_bp
     from . import sockets
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -59,6 +60,7 @@ def create_app(config: type[Config] | None = None, db=None) -> Flask:
     app.register_blueprint(assistant_bp, url_prefix="/api/assistant")
     app.register_blueprint(rooms_bp, url_prefix="/api/room")
     app.register_blueprint(stats_bp, url_prefix="/api/stats")
+    app.register_blueprint(topics_bp, url_prefix="/api/topics")
     sockets.register(socketio)
 
     from .errors import register_error_handlers

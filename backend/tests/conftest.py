@@ -43,6 +43,22 @@ FAKE_QUIZ = {
 }
 
 
+FAKE_OUTLINE = {
+    "outline": [
+        {"title": "Light reactions", "summary": "How light becomes ATP.", "subtopics": ["Thylakoids", "ATP"], "source_doc": 1, "source_page": 1, "existing": None},
+        {"title": "Calvin cycle", "summary": "Carbon fixation.", "subtopics": ["Stroma", "RuBisCO"], "source_doc": 1, "source_page": 1, "existing": None},
+    ]
+}
+
+# New material: one part extends topic 2, one part is a new topic.
+FAKE_OUTLINE_UPDATE = {
+    "outline": [
+        {"title": "Calvin cycle", "summary": "", "subtopics": ["Glucose", "Stroma"], "source_doc": 2, "source_page": 1, "existing": 2},
+        {"title": "Respiration", "summary": "Releasing energy.", "subtopics": ["Mitochondria"], "source_doc": 2, "source_page": 1, "existing": None},
+    ]
+}
+
+
 @pytest.fixture()
 def app(monkeypatch):
     db = mongomock.MongoClient().db
@@ -50,6 +66,10 @@ def app(monkeypatch):
 
     def fake_complete_json(messages, **kwargs):
         prompt = messages[-1]["content"]
+        if '"outline"' in prompt:
+            if "already has these topics" in prompt:
+                return FAKE_OUTLINE_UPDATE
+            return FAKE_OUTLINE
         if '"questions"' in prompt:
             return FAKE_QUIZ
         if '"flashcards"' in prompt:

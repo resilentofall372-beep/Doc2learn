@@ -65,12 +65,23 @@ export const documentAPI = {
     form.append('file', file);
     return api.post('/document/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  paste: (projectId, title, text) => api.post('/document/paste', { project_id: projectId, title, text }),
   getDocument: (documentId) => api.get(`/document/${documentId}`),
   deleteDocument: (documentId) => api.delete(`/document/${documentId}`),
-  generateQuiz: ({ projectId, documentId, num_questions, difficulty, focus }) =>
-    api.post('/document/generate-quiz', { ...scope(projectId, documentId), num_questions, difficulty, focus }),
-  generateFlashcards: ({ projectId, documentId, num_cards }) =>
-    api.post('/document/generate-flashcards', { ...scope(projectId, documentId), num_cards }),
+  generateQuiz: ({ projectId, documentId, topicId, num_questions, difficulty, focus }) =>
+    api.post('/document/generate-quiz', {
+      ...scope(projectId, documentId),
+      ...(topicId ? { topic_id: topicId } : {}),
+      num_questions,
+      difficulty,
+      focus,
+    }),
+  generateFlashcards: ({ projectId, documentId, topicId, num_cards }) =>
+    api.post('/document/generate-flashcards', {
+      ...scope(projectId, documentId),
+      ...(topicId ? { topic_id: topicId } : {}),
+      num_cards,
+    }),
   generateMindmap: ({ projectId, documentId }) => api.post('/document/generate-mindmap', scope(projectId, documentId)),
 };
 
@@ -83,7 +94,16 @@ export const quizAPI = {
 
 export const flashcardsAPI = {
   generate: documentAPI.generateFlashcards,
-  getFlashcards: (projectId, documentId) => api.get('/flashcards/', { params: scope(projectId, documentId) }),
+  getFlashcards: (projectId, documentId, topicId) =>
+    api.get('/flashcards/', { params: { ...scope(projectId, documentId), ...(topicId ? { topic_id: topicId } : {}) } }),
+};
+
+/** A project's topic outline. */
+export const topicsAPI = {
+  get: (projectId) => api.get('/topics/', { params: { project_id: projectId } }),
+  /** mode 'update' folds in new documents (or builds the first outline); 'rebuild' starts over. */
+  build: (projectId, mode = 'update') => api.post('/topics/build', { project_id: projectId, mode }),
+  save: (projectId, topics) => api.put('/topics/', { project_id: projectId, topics }),
 };
 
 export const mindmapAPI = {

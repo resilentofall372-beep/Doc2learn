@@ -44,6 +44,7 @@ class Collections:
     MINDMAPS = "mindmaps"
     CHAT_SESSIONS = "chat_sessions"
     ROOMS = "rooms"
+    TOPICS = "topics"
 
 
 # Collections whose rows belong to one project (deleted with it).
@@ -55,6 +56,7 @@ PROJECT_CONTENT = (
     Collections.FLASHCARDS,
     Collections.MINDMAPS,
     Collections.CHAT_SESSIONS,
+    Collections.TOPICS,
 )
 
 
@@ -90,6 +92,7 @@ def _ensure_indexes(db) -> None:
         db[Collections.FLASHCARDS].create_index([("project_id", ASCENDING), ("document_id", ASCENDING)])
         db[Collections.MINDMAPS].create_index([("project_id", ASCENDING), ("document_id", ASCENDING)])
         db[Collections.CHAT_SESSIONS].create_index([("project_id", ASCENDING), ("user_id", ASCENDING)])
+        db[Collections.TOPICS].create_index([("project_id", ASCENDING), ("user_id", ASCENDING)], unique=True)
         db[Collections.ROOMS].create_index("room_id", unique=True)
         db[Collections.ROOMS].create_index("room_code")
     except PyMongoError as exc:  # pragma: no cover - only when Mongo is down at boot

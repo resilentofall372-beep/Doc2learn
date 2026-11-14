@@ -118,6 +118,13 @@ def extract_pptx(path: str) -> Extracted:
     return result
 
 
+def from_text(text: str) -> Extracted:
+    """Text typed or pasted by the learner, treated like a one-page .txt file."""
+    result = _join_pages([text])
+    result.method = "pasted"
+    return result
+
+
 def extract_txt(path: str) -> Extracted:
     with open(path, "r", encoding="utf-8", errors="ignore") as handle:
         result = _join_pages([handle.read()])

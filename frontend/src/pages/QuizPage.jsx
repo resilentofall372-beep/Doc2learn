@@ -6,6 +6,7 @@ import { useApp } from '../contexts/AppContext';
 import { QUIZ_PREFERENCES } from '../utils/constants';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
+import TopicPicker, { useTopics } from '../components/projects/TopicPicker';
 import QuizQuestion from '../components/quiz/QuizQuestion';
 import QuizProgress from '../components/quiz/QuizProgress';
 import QuizResults from '../components/quiz/QuizResults';
@@ -33,6 +34,8 @@ const Quiz = ({ projectId, documents }) => {
     const wanted = params.get('document');
     return documents.some((d) => d._id === wanted) ? wanted : '';
   });
+  const { topics, titles: topicTitles, loaded: topicsLoaded } = useTopics(projectId);
+  const [topicId, setTopicId] = useState(() => params.get('topic') || '');
   const [numQuestions, setNumQuestions] = useState(5);
   const [difficulty, setDifficulty] = useState('medium');
   const [focus, setFocus] = useState('');
@@ -47,6 +50,11 @@ const Quiz = ({ projectId, documents }) => {
 
   useEffect(() => () => clearInterval(timer.current), []);
 
+  // Drop a ?topic= that isn't in the outline (e.g. after a rebuild).
+  useEffect(() => {
+    if (topicsLoaded && topicId && !topicTitles[topicId]) setTopicId('');
+  }, [topicsLoaded, topicId, topicTitles]);
+
   const startTimer = () => {
     clearInterval(timer.current);
     timer.current = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -59,9 +67,10 @@ const Quiz = ({ projectId, documents }) => {
       const res = await documentAPI.generateQuiz({
         projectId,
         documentId: documentId || null,
+        topicId: topicId || null,
         num_questions: numQuestions,
         difficulty,
-        focus: focus.trim() || undefined,
+        focus: topicId ? undefined : focus.trim() || undefined,
       });
       setQuizId(res.data.quiz_id);
       setQuestions(res.data.questions);
@@ -95,6 +104,7 @@ const Quiz = ({ projectId, documents }) => {
           isCorrect: r.is_correct,
           explanation: r.explanation,
           source: sourceOf(r),
+          topic: topicTitles[r.topic_id] || null,
         })),
       });
       setPhase('results');
@@ -128,6 +138,7 @@ const Quiz = ({ projectId, documents }) => {
         </div>
         <div className="space-y-6 p-5">
           {error && <div className="alert alert-danger">{error}</div>}
+          {topicsLoaded && <TopicPicker id="quiz-topic" label="Topic" projectId={projectId} topics={topics} value={topicId} onChange={setTopicId} />}
           {documents.length > 1 && <ScopePicker id="quiz-scope" label="Questions from" documents={documents} value={documentId} onChange={setDocumentId} />}
           <Segmented
             id="count-label"
@@ -137,7 +148,7 @@ const Quiz = ({ projectId, documents }) => {
             options={QUIZ_PREFERENCES.QUESTION_COUNTS.map((n) => ({ value: n, label: String(n) }))}
           />
           <Segmented id="difficulty-label" label="Difficulty" value={difficulty} onChange={setDifficulty} options={DIFFICULTY_OPTIONS} />
-          <div>
+          {!topicId && <div>
             <label htmlFor="focus" className="label">
               Focus <span className="font-normal text-zinc-400">(optional)</span>
             </label>
@@ -149,7 +160,7 @@ const Quiz = ({ projectId, documents }) => {
               placeholder="A topic or chapter, e.g. the Calvin cycle"
               className="input"
             />
-          </div>
+          </div>}
         </div>
         <div className="flex justify-end border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
           <button type="button" onClick={generate} className="btn btn-primary">
@@ -180,6 +191,7 @@ const Quiz = ({ projectId, documents }) => {
         <QuizProgress current={answeredCount} total={questions.length} />
       </div>
       <div className="px-6 py-6">
+        {topicTitles[question.topic_id] && <p className="eyebrow mb-2">{topicTitles[question.topic_id]}</p>}
         <QuizQuestion
           question={question}
           selectedAnswer={answers[current]}

@@ -81,8 +81,42 @@ def _scope_phrase(scope: dict) -> str:
 SOURCE_RULE = '- "source_doc" is the Doc number and "source_page" the Page number from the excerpt label the item comes from (integers, or null).'
 
 
+def _topic_block(topics: list[dict] | None) -> tuple[str, str, str]:
+    """Prompt pieces asking the model to tag each item with a topic from the outline.
+
+    Returns (rule, json_field, menu); all empty when there is no outline to tag against.
+    """
+    if not topics:
+        return "", "", ""
+    menu = "\n".join(f"{i}. {t['title']}" for i, t in enumerate(topics, start=1))
+    rule = '\n- "topic" is the number of the topic (listed below) that the item is about (integer, or null if none fits).'
+    return rule, ', "topic": int|null', f"\n\nTopics in this project:\n{menu}"
+
+
+def _topic_id(raw: dict, topics: list[dict] | None, fixed: str | None) -> str | None:
+    """The topic an item belongs to: the requested topic, else the model's pick."""
+    if fixed:
+        return fixed
+    number = raw.get("topic")
+    if topics and isinstance(number, (int, float)) and 1 <= int(number) <= len(topics):
+        return topics[int(number) - 1]["id"]
+    return None
+
+
+def _focus_line(focus: str | None) -> str:
+    return f"\nOnly cover this topic: {focus}." if focus else ""
+
+
 # --------------------------------------------------------------------------- quiz
-def generate_quiz(scope: dict, num_questions: int, difficulty: str, focus: str | None = None) -> list[dict]:
+def generate_quiz(
+    scope: dict,
+    num_questions: int,
+    difficulty: str,
+    focus: str | None = None,
+    topics: list[dict] | None = None,
+    topic_id: str | None = None,
+) -> list[dict]:
+    """`topics` is the project outline (to tag questions); `topic_id` pins every question to one topic."""
     if focus:
         context, legend, _ = retrieval.context_for(scope, focus, max_chars=8000, top_k=10)
     else:
@@ -93,8 +127,9 @@ def generate_quiz(scope: dict, num_questions: int, difficulty: str, focus: str |
         "hard": "analysis, comparison and reasoning across the material",
     }.get(difficulty, "understanding and application of the ideas")
 
+    topic_rule, topic_field, topic_menu = _topic_block(None if topic_id else topics)
     prompt = f"""Write {num_questions} multiple-choice questions from the excerpts below.
-Difficulty: {difficulty} ({guidance}).
+Difficulty: {difficulty} ({guidance}).{_focus_line(focus)}
 
 Rules:
 - Every question must be answerable from the excerpts alone.
@@ -102,9 +137,9 @@ Rules:
 - Exactly four options labelled A-D, all plausible, only one correct. No "all/none of the above".
 - Vary which letter is correct.
 - "explanation" says why the answer is right and why the distractors are wrong, in 1-3 sentences.
-{SOURCE_RULE}
+{SOURCE_RULE}{topic_rule}
 
-Return JSON: {{"questions": [{{"question": str, "options": {{"A": str, "B": str, "C": str, "D": str}}, "answer": "A"|"B"|"C"|"D", "explanation": str, "source_doc": int|null, "source_page": int|null}}]}}
+Return JSON: {{"questions": [{{"question": str, "options": {{"A": str, "B": str, "C": str, "D": str}}, "answer": "A"|"B"|"C"|"D", "explanation": str, "source_doc": int|null, "source_page": int|null{topic_field}}}]}}{topic_menu}
 
 Excerpts:
 {context}"""
@@ -133,21 +168,33 @@ Excerpts:
                 "answer": answer,
                 "explanation": str(raw.get("explanation", "")).strip(),
                 **_source(raw, legend),
+                "topic_id": _topic_id(raw, topics, topic_id),
             }
         )
     return questions
 
 
 # --------------------------------------------------------------------------- flashcards
-def generate_flashcards(scope: dict, num_cards: int) -> list[dict]:
-    context, legend = retrieval.spread_context(scope)
-    prompt = f"""Create {num_cards} study flashcards from the excerpts.
+def generate_flashcards(
+    scope: dict,
+    num_cards: int,
+    focus: str | None = None,
+    topics: list[dict] | None = None,
+    topic_id: str | None = None,
+) -> list[dict]:
+    """`topics` is the project outline (to tag cards); `topic_id` pins every card to one topic."""
+    if focus:
+        context, legend, _ = retrieval.context_for(scope, focus, max_chars=8000, top_k=10)
+    else:
+        context, legend = retrieval.spread_context(scope)
+    topic_rule, topic_field, topic_menu = _topic_block(None if topic_id else topics)
+    prompt = f"""Create {num_cards} study flashcards from the excerpts.{_focus_line(focus)}
 Cover distinct concepts: definitions, key facts, processes, comparisons.
 If the excerpts come from several documents, cover each of them.
 "front" is a short question or term; "back" is a precise answer in 1-3 sentences.
-{SOURCE_RULE}
+{SOURCE_RULE}{topic_rule}
 
-Return JSON: {{"flashcards": [{{"front": str, "back": str, "source_doc": int|null, "source_page": int|null}}]}}
+Return JSON: {{"flashcards": [{{"front": str, "back": str, "source_doc": int|null, "source_page": int|null{topic_field}}}]}}{topic_menu}
 
 Excerpts:
 {context}"""
@@ -163,9 +210,67 @@ Excerpts:
                     "front": str(raw["front"]).strip(),
                     "back": str(raw["back"]).strip(),
                     **_source(raw, legend),
+                    "topic_id": _topic_id(raw, topics, topic_id),
                 }
             )
     return cards
+
+
+# --------------------------------------------------------------------------- topic outline
+def generate_outline(scope: dict, existing: list[dict] | None = None) -> list[dict]:
+    """Split the material into an ordered list of study topics.
+
+    `scope` may name several documents ("document_ids"). With `existing` topics (new
+    documents joining a project), the model can file new material under one of them
+    instead of duplicating it: those items come back with "existing" = that topic's
+    1-based number.
+    Returns [{"title", "summary", "subtopics", "source_document", "source_page", "existing"}].
+    """
+    context, legend = retrieval.spread_context(scope, max_chars=12000)
+    if not context:
+        return []
+    if existing:
+        menu = "\n".join(f"{i}. {t['title']}" for i, t in enumerate(existing, start=1))
+        merge_rule = f"""
+The project already has these topics:
+{menu}
+The excerpts are NEW material. If some of it belongs under one of those topics, return it with
+"existing" set to that topic's number, and list only the subtopics it adds. Otherwise create a new
+topic with "existing": null. Never repeat an existing topic as a new one."""
+    else:
+        merge_rule = '\nSet "existing" to null for every topic.'
+
+    prompt = f"""Organise the excerpts into a study outline: the topics a learner should work through,
+in a sensible learning order (foundations first).
+- 3-12 topics. Each "title" is short (under 8 words) and uses the material's own terminology.
+- "summary" says in one sentence what the topic covers.
+- "subtopics" lists 2-6 key ideas within it (each under 8 words).
+{SOURCE_RULE}{merge_rule}
+
+Return JSON: {{"outline": [{{"title": str, "summary": str, "subtopics": [str, ...], "source_doc": int|null, "source_page": int|null, "existing": int|null}}]}}
+
+Excerpts:
+{context}"""
+    data = complete_json(
+        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
+    topics = []
+    for raw in _as_list(data.get("outline") if isinstance(data, dict) else data, 15):
+        if not isinstance(raw, dict) or not str(raw.get("title") or "").strip():
+            continue
+        number = raw.get("existing")
+        match = int(number) if existing and isinstance(number, (int, float)) and 1 <= int(number) <= len(existing) else None
+        topics.append(
+            {
+                "title": str(raw["title"]).strip()[:80],
+                "summary": str(raw.get("summary") or "").strip()[:300],
+                "subtopics": [str(x).strip()[:80] for x in _as_list(raw.get("subtopics"), 8) if str(x).strip()],
+                **_source(raw, legend),
+                "existing": match,
+            }
+        )
+    return topics
 
 
 # --------------------------------------------------------------------------- concept map

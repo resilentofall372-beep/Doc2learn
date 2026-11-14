@@ -15,6 +15,7 @@ import ProjectDocuments from './pages/ProjectDocuments';
 import QuizPage from './pages/QuizPage';
 import FlashcardsPage from './pages/FlashcardsPage';
 import MindMapPage from './pages/MindMapPage';
+import TopicsPage from './pages/TopicsPage';
 import ChatPage from './pages/ChatPage';
 import StudyRooms from './pages/StudyRooms';
 import RoomPage from './pages/RoomPage';
@@ -54,6 +55,7 @@ function App() {
               <Route path="/projects/:projectId/quiz" element={protectedPage(<QuizPage />)} />
               <Route path="/projects/:projectId/flashcards" element={protectedPage(<FlashcardsPage />)} />
               <Route path="/projects/:projectId/map" element={protectedPage(<MindMapPage />)} />
+              <Route path="/projects/:projectId/topics" element={protectedPage(<TopicsPage />)} />
 
               <Route path="/study-rooms" element={protectedPage(<StudyRooms />)} />
               <Route path="/create-quiz-room" element={protectedPage(<CreateQuizRoom />)} />

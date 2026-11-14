@@ -1,7 +1,8 @@
-"""Upload, read and delete documents in a project; generate quizzes, flashcards and concept maps.
+"""Upload, paste, read and delete documents in a project; generate quizzes, flashcards and concept maps.
 
 Generation endpoints take `project_id` and an optional `document_id`:
-leave the document out to work across the whole project.
+leave the document out to work across the whole project. Quizzes and
+flashcards also take an optional `topic_id` from the project's outline.
 """
 from __future__ import annotations
 
@@ -17,8 +18,9 @@ from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import Collections, get_db
 from ..services import generation, retrieval
-from ..services.extract import ExtractionError, extract_text
+from ..services.extract import ExtractionError, Extracted, extract_text, from_text
 from ..utils import clamp, clean_str, serialize
+from .topics import drop_document, find_topic, topic_focus, topic_list
 
 bp = Blueprint("documents", __name__)
 
@@ -82,7 +84,28 @@ def upload():
             os.remove(tmp_path)
         except OSError:
             pass
+    return _store(project_id, filename, ext, size, extracted)
 
+
+@bp.post("/paste")
+@require_auth
+def paste():
+    """Add typed or pasted text (notes without a file) to a project as a .txt document."""
+    data = request.get_json(silent=True) or {}
+    project = owned_project(data.get("project_id"), {"_id": 1})
+    title = clean_str(data.get("title"), 120)
+    text = data.get("text") if isinstance(data.get("text"), str) else ""
+    if not title:
+        raise ApiError("Give the text a title")
+    if len(text.strip()) < 20:
+        raise ApiError("Paste at least a few sentences")
+    filename = title if title.lower().endswith((".txt", ".md")) else f"{title}.txt"
+    extracted = from_text(text)
+    return _store(str(project["_id"]), filename, "txt", len(text.encode("utf-8")), extracted)
+
+
+def _store(project_id: str, filename: str, ext: str, size: int, extracted: Extracted):
+    """Save an extracted document, index it for retrieval, and return the upload response."""
     text = extracted.text[: current_app.config["MAX_DOCUMENT_CHARS"]]
     now = datetime.now(timezone.utc)
     doc = {
@@ -146,8 +169,18 @@ def delete_document(document_id):
     for name in (Collections.QUIZZES, Collections.QUIZ_ATTEMPTS, Collections.FLASHCARDS, Collections.MINDMAPS):
         db[name].delete_many({"document_id": document_id, "user_id": g.user_id})
     if doc.get("project_id"):
+        drop_document(doc["project_id"], g.user_id, document_id)
         touch_project(doc["project_id"])
     return jsonify({"success": True, "deleted": document_id})
+
+
+def _topic_args(scope: dict, data: dict) -> tuple[dict | None, list[dict], str | None]:
+    """(chosen topic or None, the outline to tag against, focus text) for a generation request."""
+    topic = find_topic(scope["project_id"], g.user_id, data.get("topic_id") or None)
+    focus = clean_str(data.get("focus"), 200) or None
+    if topic:
+        focus = topic_focus(topic)
+    return topic, topic_list(scope["project_id"], g.user_id), focus
 
 
 # --------------------------------------------------------------------------- generation
@@ -158,9 +191,11 @@ def generate_quiz():
     scope = resolve_scope(data)
     num_questions = clamp(data.get("num_questions"), 1, 25, 5)
     difficulty = data.get("difficulty") if data.get("difficulty") in DIFFICULTIES else "medium"
-    focus = clean_str(data.get("focus"), 200) or None
+    topic, topics, focus = _topic_args(scope, data)
 
-    questions = generation.generate_quiz(_scope_args(scope), num_questions, difficulty, focus)
+    questions = generation.generate_quiz(
+        _scope_args(scope), num_questions, difficulty, focus, topics=topics, topic_id=topic["id"] if topic else None
+    )
     if not questions:
         raise ApiError("The model did not produce usable questions. Try again or lower the count.", 502)
 
@@ -172,6 +207,7 @@ def generate_quiz():
         "num_questions": len(questions),
         "difficulty": difficulty,
         "focus": focus,
+        "topic_id": topic["id"] if topic else None,
         "model": current_app.config["LLM_MODEL"],
         "created_at": datetime.now(timezone.utc),
     }
@@ -185,6 +221,7 @@ def generate_quiz():
             "quiz_id": str(result.inserted_id),
             **_scope_args(scope),
             "difficulty": difficulty,
+            "topic_id": topic["id"] if topic else None,
             "questions": questions,
         }
     )
@@ -196,23 +233,29 @@ def generate_flashcards():
     data = request.get_json(silent=True) or {}
     scope = resolve_scope(data)
     num_cards = clamp(data.get("num_cards"), 3, 30, 10)
+    topic, topics, focus = _topic_args(scope, data)
 
-    cards = generation.generate_flashcards(_scope_args(scope), num_cards)
+    cards = generation.generate_flashcards(
+        _scope_args(scope), num_cards, focus, topics=topics, topic_id=topic["id"] if topic else None
+    )
     if not cards:
         raise ApiError("The model did not produce usable flashcards. Try again.", 502)
 
+    created_at = datetime.now(timezone.utc)
     get_db()[Collections.FLASHCARDS].insert_one(
         {
             **_scope_args(scope),
             "user_id": g.user_id,
+            # A deck for one topic is kept separately from the deck for the whole scope.
+            "topic_id": topic["id"] if topic else None,
             "flashcards": cards,
             "num_cards": len(cards),
             "model": current_app.config["LLM_MODEL"],
-            "created_at": datetime.now(timezone.utc),
+            "created_at": created_at,
         }
     )
     touch_project(scope["project_id"])
-    return jsonify({"success": True, "flashcards": cards})
+    return jsonify({"success": True, "flashcards": cards, "generated_at": created_at.isoformat()})
 
 
 @bp.post("/generate-mindmap")
@@ -240,4 +283,4 @@ def generate_mindmap():
         upsert=True,
     )
     touch_project(scope["project_id"])
-    return jsonify({"success": True, "mindmap": mindmap})
+    return jsonify({"success": True, "mindmap": mindmap, "generated_at": datetime.now(timezone.utc).isoformat()})

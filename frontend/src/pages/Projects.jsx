@@ -5,6 +5,7 @@ import { errorMessage, projectAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import ProjectDialog from '../components/projects/ProjectDialog';
+import AddDocumentsDialog from '../components/document/AddDocumentsDialog';
 import { forgetProject } from '../components/projects/ProjectLayout';
 import { colorFor } from '../components/ui/Avatar';
 import PageHeader from '../components/ui/PageHeader';
@@ -55,6 +56,7 @@ const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState({ open: false, project: null });
+  const [created, setCreated] = useState(null); // new project waiting for its first files
   const { addNotification } = useApp();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -83,9 +85,16 @@ const Projects = () => {
     } else {
       const res = await projectAPI.create(data);
       setDialog({ open: false, project: null });
-      navigate(`/projects/${res.data.project._id}`);
+      setProjects((prev) => [res.data.project, ...prev]);
+      setCreated(res.data.project); // step 2: add files before opening it
     }
   };
+
+  const openCreated = useCallback(() => {
+    if (!created) return;
+    setCreated(null);
+    navigate(`/projects/${created._id}`);
+  }, [created, navigate]);
 
   const remove = async (project) => {
     const files = project.document_count === 1 ? '1 document' : `${project.document_count} documents`;
@@ -179,6 +188,16 @@ const Projects = () => {
         project={dialog.project}
         onClose={() => setDialog({ open: false, project: null })}
         onSave={save}
+      />
+
+      <AddDocumentsDialog
+        open={Boolean(created)}
+        projectId={created?._id}
+        title={created ? `Add documents to ${created.name}` : ''}
+        description="Add the notes, slides or chapters for this subject. You can always add more later."
+        skipLabel="Skip for now"
+        doneLabel="Open project"
+        onClose={openCreated}
       />
     </div>
   );

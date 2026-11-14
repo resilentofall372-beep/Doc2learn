@@ -45,6 +45,7 @@ def submit():
                 "explanation": question.get("explanation", ""),
                 "source_document": question.get("source_document"),
                 "source_page": question.get("source_page"),
+                "topic_id": question.get("topic_id"),
             }
         )
     total = len(quiz["questions"])

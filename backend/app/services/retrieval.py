@@ -146,6 +146,8 @@ def _chunk_filter(scope: dict) -> dict:
     query = {"project_id": scope["project_id"]}
     if scope.get("document_id"):
         query["document_id"] = scope["document_id"]
+    elif scope.get("document_ids"):
+        query["document_id"] = {"$in": list(scope["document_ids"])}
     return query
 
 

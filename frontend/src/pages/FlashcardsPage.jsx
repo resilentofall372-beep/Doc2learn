@@ -1,37 +1,55 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Layers, RefreshCw } from 'lucide-react';
 import { errorMessage, flashcardsAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
+import TopicPicker, { useTopics } from '../components/projects/TopicPicker';
 import FlashcardDeck from '../components/flashcards/FlashcardDeck';
+import StaleNotice from '../components/projects/StaleNotice';
 import EmptyState from '../components/ui/EmptyState';
 import { PageLoader } from '../components/common/LoadingSpinner';
+import { newerDocuments } from '../utils/time';
 
 const Deck = ({ projectId, documents }) => {
   const { addNotification } = useApp();
   const [params, setParams] = useSearchParams();
   const wanted = params.get('document');
   const documentId = documents.some((d) => d._id === wanted) ? wanted : '';
+  const { topics, titles: topicTitles, loaded: topicsLoaded } = useTopics(projectId);
+  const wantedTopic = params.get('topic') || '';
+  // Until the outline loads, trust the URL; afterwards ignore ids that aren't in it.
+  const topicId = !topicsLoaded || topicTitles[wantedTopic] ? wantedTopic : '';
   const [flashcards, setFlashcards] = useState([]);
+  const [generatedAt, setGeneratedAt] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [numCards, setNumCards] = useState(10);
 
-  const setDocumentId = (id) => setParams(id ? { document: id } : {}, { replace: true });
+  const setParam = (key, value) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        return next;
+      },
+      { replace: true }
+    );
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await flashcardsAPI.getFlashcards(projectId, documentId || null);
+      const res = await flashcardsAPI.getFlashcards(projectId, documentId || null, topicId || null);
       setFlashcards(res.data.flashcards || []);
+      setGeneratedAt(res.data.generated_at || null);
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not load flashcards', message: errorMessage(error) });
     } finally {
       setLoading(false);
     }
-  }, [projectId, documentId, addNotification]);
+  }, [projectId, documentId, topicId, addNotification]);
 
   useEffect(() => {
     load();
@@ -40,8 +58,9 @@ const Deck = ({ projectId, documents }) => {
   const generate = async () => {
     setGenerating(true);
     try {
-      const res = await flashcardsAPI.generate({ projectId, documentId: documentId || null, num_cards: numCards });
+      const res = await flashcardsAPI.generate({ projectId, documentId: documentId || null, topicId: topicId || null, num_cards: numCards });
       setFlashcards(res.data.flashcards || []);
+      setGeneratedAt(res.data.generated_at || new Date().toISOString());
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not generate flashcards', message: errorMessage(error) });
     } finally {
@@ -49,12 +68,25 @@ const Deck = ({ projectId, documents }) => {
     }
   };
 
-  const picker =
-    documents.length > 1 ? (
-      <div className="mx-auto mb-6 max-w-2xl">
-        <ScopePicker id="cards-scope" label="Deck for" documents={documents} value={documentId} onChange={setDocumentId} />
-      </div>
-    ) : null;
+  // Topic names on the cards; memoised so the deck doesn't reset on every render.
+  const cards = useMemo(
+    () => flashcards.map((card) => ({ ...card, topic_title: topicTitles[card.topic_id] || null })),
+    [flashcards, topicTitles]
+  );
+
+  // A one-document deck can't miss newer files; a whole-project deck can.
+  const missing = documentId ? [] : newerDocuments(documents, generatedAt);
+
+  const pickers = (
+    <div className="mx-auto mb-6 grid max-w-2xl gap-4 sm:grid-cols-2">
+      {topicsLoaded && (
+        <TopicPicker id="cards-topic" label="Topic" projectId={projectId} topics={topics} value={topicId} onChange={(id) => setParam('topic', id)} />
+      )}
+      {documents.length > 1 && (
+        <ScopePicker id="cards-scope" label="Deck for" documents={documents} value={documentId} onChange={(id) => setParam('document', id)} />
+      )}
+    </div>
+  );
 
   if (loading) return <PageLoader />;
   if (generating) return <PageLoader label="Writing flashcards from your documents…" />;
@@ -62,11 +94,11 @@ const Deck = ({ projectId, documents }) => {
   if (flashcards.length === 0) {
     return (
       <>
-        {picker}
+        {pickers}
         <div className="card">
           <EmptyState
             icon={Layers}
-            title="No flashcards yet"
+            title={topicId ? `No flashcards for “${topicTitles[topicId] || 'this topic'}” yet` : 'No flashcards yet'}
             description="Generate a deck from your documents. Each card notes the file and page it came from."
             action={
               <div className="flex items-center gap-2">
@@ -91,8 +123,13 @@ const Deck = ({ projectId, documents }) => {
 
   return (
     <>
-      {picker}
-      <FlashcardDeck flashcards={flashcards} />
+      {pickers}
+      {missing.length > 0 && (
+        <div className="mx-auto mb-6 max-w-2xl">
+          <StaleNotice what="deck" documents={missing} onRegenerate={generate} />
+        </div>
+      )}
+      <FlashcardDeck flashcards={cards} />
       <div className="mt-10 text-center">
         <button type="button" onClick={generate} className="btn btn-ghost btn-sm">
           <RefreshCw className="h-3.5 w-3.5" />
