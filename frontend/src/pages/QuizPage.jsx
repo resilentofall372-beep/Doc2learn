@@ -7,6 +7,7 @@ import { QUIZ_PREFERENCES } from '../utils/constants';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
 import TopicPicker, { useTopics } from '../components/projects/TopicPicker';
+import PracticeNav from '../components/projects/PracticeNav';
 import QuizQuestion from '../components/quiz/QuizQuestion';
 import QuizProgress from '../components/quiz/QuizProgress';
 import QuizResults from '../components/quiz/QuizResults';
@@ -37,7 +38,9 @@ const Quiz = ({ projectId, documents }) => {
   const { topics, titles: topicTitles, loaded: topicsLoaded } = useTopics(projectId);
   const [topicId, setTopicId] = useState(() => params.get('topic') || '');
   const [numQuestions, setNumQuestions] = useState(5);
-  const [difficulty, setDifficulty] = useState('medium');
+  const [difficulty, setDifficulty] = useState(() =>
+    ['easy', 'medium', 'hard'].includes(params.get('difficulty')) ? params.get('difficulty') : 'medium'
+  );
   const [focus, setFocus] = useState('');
   const [quizId, setQuizId] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -129,6 +132,8 @@ const Quiz = ({ projectId, documents }) => {
 
   if (phase === 'settings') {
     return (
+      <>
+      <PracticeNav projectId={projectId} />
       <section className="card mx-auto max-w-xl">
         <div className="card-header">
           <div>
@@ -169,6 +174,7 @@ const Quiz = ({ projectId, documents }) => {
           </button>
         </div>
       </section>
+      </>
     );
   }
 

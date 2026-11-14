@@ -1,20 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, NavLink, useParams } from 'react-router-dom';
-import { ChevronLeft, FileText, FolderOpen, Layers, ListChecks, ListTree, MessageSquareText, Network, Plus, Radio, Upload } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { ChevronLeft, FileText, FolderOpen, LayoutDashboard, ListChecks, MessageSquareText, Network, Plus, Radio, Upload } from 'lucide-react';
 import { errorMessage, projectAPI } from '../../services/api';
 import { colorFor } from '../ui/Avatar';
 import EmptyState from '../ui/EmptyState';
 import { PageLoader } from '../common/LoadingSpinner';
 import AddDocumentsDialog from '../document/AddDocumentsDialog';
 
+// The study flow, left to right. `also` lists other pages that belong to the same tab.
 const TABS = [
-  { path: '', label: 'Documents', icon: FileText, end: true },
-  { path: '/topics', label: 'Topics', icon: ListTree },
-  { path: '/tutor', label: 'Tutor', icon: MessageSquareText },
-  { path: '/quiz', label: 'Quiz', icon: ListChecks },
-  { path: '/flashcards', label: 'Flashcards', icon: Layers },
-  { path: '/map', label: 'Concept map', icon: Network },
+  { path: '', label: 'Overview', icon: LayoutDashboard, also: ['/topics'] },
+  { path: '/learn', label: 'Learn', icon: MessageSquareText, also: ['/tutor'] },
+  { path: '/quiz', label: 'Practice', icon: ListChecks, also: ['/flashcards', '/review'] },
+  { path: '/map', label: 'Map', icon: Network },
+  { path: '/documents', label: 'Documents', icon: FileText },
 ];
+
+const isActiveTab = (tab, pathname, base) => {
+  const rest = pathname.slice(base.length).replace(/\/$/, '');
+  return [tab.path, ...(tab.also || [])].some((p) => (p === '' ? rest === '' : rest === p || rest.startsWith(`${p}/`)));
+};
 
 // Small in-memory cache so switching tabs doesn't refetch the project.
 const cache = new Map();
@@ -29,6 +34,7 @@ export const forgetProject = (projectId) => cache.delete(projectId);
  */
 const ProjectLayout = ({ children, needsDocuments = true }) => {
   const { projectId } = useParams();
+  const { pathname } = useLocation();
   const [data, setData] = useState(() => cache.get(projectId) || null);
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -120,23 +126,25 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
       </div>
 
       <nav className="no-scrollbar -mx-1 mt-6 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-200 dark:border-zinc-800" aria-label="Project sections">
-        {TABS.map(({ path, label, icon: Icon, end }) => (
-          <NavLink
-            key={label}
-            to={`${base}${path}`}
-            end={end}
-            className={({ isActive }) =>
-              `-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const active = isActiveTab(tab, pathname, base);
+          return (
+            <Link
+              key={tab.label}
+              to={`${base}${tab.path}`}
+              aria-current={active ? 'page' : undefined}
+              className={`-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+                active
                   ? 'border-primary-600 text-zinc-900 dark:border-primary-400 dark:text-zinc-50'
                   : 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-200'
-              }`
-            }
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </NavLink>
-        ))}
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </Link>
+          );
+        })}
       </nav>
 
       <div className="pt-6">

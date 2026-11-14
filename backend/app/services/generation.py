@@ -12,6 +12,7 @@ Design rules shared by all prompts:
 from __future__ import annotations
 
 import re
+import uuid
 
 from . import retrieval
 from .llm import complete, complete_json
@@ -220,6 +221,7 @@ Excerpts:
         if isinstance(raw, dict) and raw.get("front") and raw.get("back"):
             cards.append(
                 {
+                    "id": uuid.uuid4().hex[:16],  # lets reviews follow the card
                     "front": str(raw["front"]).strip(),
                     "back": str(raw["back"]).strip(),
                     **_source(raw, legend),
@@ -407,7 +409,28 @@ Excerpts:
     return {"topic": topic, "problems": problems, "total": len(problems), "legend": legend}
 
 
-def study_plan(scope: dict, weak_areas: list[str], days: int, performance: dict | None = None) -> dict:
+def _progress_lines(progress: list[dict]) -> str:
+    """One line per outline topic, in learning order, with what the learner has shown so far."""
+    lines = []
+    for i, t in enumerate(progress, start=1):
+        if t["mastery"] is None:
+            state = "not started"
+        else:
+            state = f"mastery {t['mastery']}% ({t['quiz']['correct']}/{t['quiz']['answered']} quiz answers right)"
+        if t["cards"]["due"]:
+            state += f", {t['cards']['due']} flashcards due"
+        lines.append(f"{i}. {t['title']}: {state}")
+    return "\n".join(lines)
+
+
+def study_plan(
+    scope: dict,
+    weak_areas: list[str],
+    days: int,
+    performance: dict | None = None,
+    progress: list[dict] | None = None,
+) -> dict:
+    """`progress` is the per-topic progress (services.progress); when given, the plan follows the outline."""
     context, legend = retrieval.spread_context(scope, max_chars=6000)
     weak = ", ".join(weak_areas) if weak_areas else "none reported"
     perf = ""
@@ -416,10 +439,17 @@ def study_plan(scope: dict, weak_areas: list[str], days: int, performance: dict 
             f"\nRecent quiz performance: average {performance.get('average_score', 0)}% "
             f"over {performance.get('attempts', 0)} attempt(s)."
         )
+    outline = ""
+    if progress:
+        outline = f"""
+The project's topics, in learning order, with the learner's progress:
+{_progress_lines(progress)}
+Use these topic titles as each day's "topic". Cover not-started topics in order, give the most time to
+low-mastery topics, put due flashcards early, and leave mastered topics to brief review."""
     prompt = f"""Create a {days}-day study plan for {_scope_phrase(scope)}.
-Learner's self-reported weak areas: {weak}.{perf}
+Weak areas: {weak}.{perf}{outline}
 Spend more time on weak areas, interleave review, and keep each day to 3-4 concrete activities
-(each under 15 words). Finish with a review day.
+(each under 15 words, e.g. "Take a 5-question quiz on X", "Review due flashcards"). Finish with a review day.
 Return JSON: {{"plan": [{{"day": int, "topic": str, "activities": [str, ...]}}]}}
 
 Excerpts:

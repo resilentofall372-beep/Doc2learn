@@ -6,6 +6,7 @@ import { useApp } from '../contexts/AppContext';
 import { useAuth } from '../contexts/AuthContext';
 import ProjectDialog from '../components/projects/ProjectDialog';
 import AddDocumentsDialog from '../components/document/AddDocumentsDialog';
+import TodayPanel from '../components/dashboard/TodayPanel';
 import { forgetProject } from '../components/projects/ProjectLayout';
 import { colorFor } from '../components/ui/Avatar';
 import PageHeader from '../components/ui/PageHeader';
@@ -127,6 +128,8 @@ const Projects = () => {
           )
         }
       />
+
+      {projects.length > 0 && <TodayPanel />}
 
       {projects.length === 0 ? (
         <div className="card">

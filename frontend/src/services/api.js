@@ -56,6 +56,8 @@ export const projectAPI = {
   update: (projectId, data) => api.patch(`/projects/${projectId}`, data),
   remove: (projectId) => api.delete(`/projects/${projectId}`),
   stats: (projectId) => api.get(`/projects/${projectId}/stats`),
+  /** Topic progress, cards due, next step, quiz stats and the saved study plan. */
+  overview: (projectId) => api.get(`/projects/${projectId}/overview`),
 };
 
 export const documentAPI = {
@@ -96,6 +98,12 @@ export const flashcardsAPI = {
   generate: documentAPI.generateFlashcards,
   getFlashcards: (projectId, documentId, topicId) =>
     api.get('/flashcards/', { params: { ...scope(projectId, documentId), ...(topicId ? { topic_id: topicId } : {}) } }),
+  /** Rate a card: 'again' | 'hard' | 'good' | 'easy'. Schedules its next review. */
+  review: (projectId, card, rating, documentId) =>
+    api.post('/flashcards/review', { project_id: projectId, card, rating, ...(documentId ? { document_id: documentId } : {}) }),
+  /** Cards due now (optionally for one topic). `total` counts all of them. */
+  due: (projectId, topicId, limit = 100) =>
+    api.get('/flashcards/due', { params: { project_id: projectId, limit, ...(topicId ? { topic_id: topicId } : {}) } }),
 };
 
 /** A project's topic outline. */
@@ -121,6 +129,8 @@ export const assistantAPI = {
     api.post('/assistant/summarize', { ...scope(projectId, documentId), summary_type: summaryType }),
   createStudyPlan: (projectId, documentId, weakAreas, days = 7) =>
     api.post('/assistant/study-plan', { ...scope(projectId, documentId), weak_areas: weakAreas, days }),
+  getStudyPlan: (projectId) => api.get(`/assistant/study-plan/${projectId}`),
+  markPlanDay: (projectId, day, done = true) => api.post(`/assistant/study-plan/${projectId}/done`, { day, done }),
   getChatHistory: (projectId) => api.get(`/assistant/chat/history/${projectId}`),
   clearChat: (sessionId) => api.post('/assistant/chat/clear', { session_id: sessionId }),
 };
@@ -131,6 +141,8 @@ export const healthAPI = {
 
 export const statsAPI = {
   me: () => api.get('/stats/me'),
+  /** What to do today across projects. */
+  today: () => api.get('/stats/today'),
 };
 
 export const roomAPI = {

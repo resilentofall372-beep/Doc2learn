@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Network, RefreshCw } from 'lucide-react';
-import { errorMessage, mindmapAPI } from '../services/api';
+import { errorMessage, mindmapAPI, projectAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
@@ -18,7 +18,31 @@ const ConceptMap = ({ projectId, documents }) => {
   const documentId = documents.some((d) => d._id === wanted) ? wanted : '';
   const [mindmap, setMindmap] = useState(null);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [topicProgress, setTopicProgress] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    projectAPI
+      .overview(projectId)
+      .then((res) => alive && setTopicProgress(res.data.topics || []))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
+
+  // A branch matches an outline topic when one title contains the other (case-insensitive).
+  const progressFor = useMemo(() => {
+    if (!topicProgress.length) return null;
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    const rows = topicProgress.map((t) => ({ ...t, key: norm(t.title) }));
+    return (text) => {
+      const key = norm(text);
+      if (!key) return null;
+      return rows.find((t) => t.key === key) || rows.find((t) => t.key.includes(key) || key.includes(t.key)) || null;
+    };
+  }, [topicProgress]);
   const [generating, setGenerating] = useState(false);
 
   const setDocumentId = (id) => setParams(id ? { document: id } : {}, { replace: true });
@@ -102,7 +126,7 @@ const ConceptMap = ({ projectId, documents }) => {
           </button>
         </div>
         <div className="p-5">
-          <MindMapCanvas mindmap={mindmap} />
+          <MindMapCanvas mindmap={mindmap} progressFor={progressFor} />
         </div>
       </section>
     </>

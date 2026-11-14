@@ -41,6 +41,16 @@ const QuizResults = ({ results, onRestart, projectId }) => {
   const shown = results.questions.filter((q) => filter === 'all' || !q.isCorrect);
   const missed = results.questions.filter((q) => !q.isCorrect).length;
 
+  // Score per topic, for questions that carry one.
+  const byTopic = Object.values(
+    results.questions.reduce((acc, q) => {
+      if (!q.topic) return acc;
+      const row = acc[q.topic] || { topic: q.topic, correct: 0, total: 0 };
+      acc[q.topic] = { ...row, correct: row.correct + (q.isCorrect ? 1 : 0), total: row.total + 1 };
+      return acc;
+    }, {})
+  );
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <section className="card flex flex-col items-center gap-6 p-6 sm:flex-row sm:p-8">
@@ -56,7 +66,7 @@ const QuizResults = ({ results, onRestart, projectId }) => {
               New quiz
             </button>
             {missed > 0 && (
-              <Link to={`/projects/${projectId}/tutor`} className="btn btn-secondary">
+              <Link to={`/projects/${projectId}/learn`} className="btn btn-secondary">
                 <MessageSquareText className="h-4 w-4" />
                 Ask the tutor about mistakes
               </Link>
@@ -64,6 +74,44 @@ const QuizResults = ({ results, onRestart, projectId }) => {
           </div>
         </div>
       </section>
+
+      {byTopic.length > 0 && (
+        <section className="card">
+          <div className="card-header py-3">
+            <h3 className="card-title">By topic</h3>
+            <Link to={`/projects/${projectId}`} className="btn btn-ghost btn-sm -mr-2">See overall progress</Link>
+          </div>
+          <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
+            {byTopic.map((row) => {
+              const pct = Math.round((100 * row.correct) / row.total);
+              return (
+                <li key={row.topic} className="flex items-center gap-4 px-5 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{row.topic}</p>
+                    <div className="progress-track mt-1.5">
+                      <div
+                        className={`h-full rounded-full ${pct >= 75 ? 'bg-emerald-500' : pct >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="muted flex-shrink-0 text-xs tabular-nums">
+                    {row.correct} of {row.total}
+                  </span>
+                  {pct < 75 && (
+                    <Link
+                      to={`/projects/${projectId}/learn?tool=explain&concept=${encodeURIComponent(row.topic)}`}
+                      className="btn btn-secondary btn-sm flex-shrink-0"
+                    >
+                      Re-learn
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       <section className="card">
         <div className="card-header py-3">

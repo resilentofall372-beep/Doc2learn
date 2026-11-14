@@ -67,6 +67,49 @@ def compute_stats(user_id: str, project_id: str | None = None) -> dict:
     }
 
 
+@bp.get("/today")
+@require_auth
+def today():
+    """What to do today across projects: cards due, each project's next step and weakest topic.
+
+    Projects are ordered by when they were last opened (at most 12).
+    """
+    from ..services.progress import project_overview
+    from .assistant import saved_plan
+
+    db = get_db()
+    projects = list(
+        db[Collections.PROJECTS].find({"user_id": g.user_id}, {"name": 1, "color": 1, "last_opened_at": 1, "updated_at": 1})
+        .sort([("last_opened_at", -1), ("updated_at", -1)])
+        .limit(12)
+    )
+    rows = []
+    for project in projects:
+        project_id = str(project["_id"])
+        overview = project_overview(g.user_id, project_id)
+        started = [t for t in overview["topics"] if t["mastery"] is not None and t["status"] != "mastered"]
+        weakest = min(started, key=lambda t: t["mastery"]) if started else None
+        plan = saved_plan(g.user_id, project_id)["saved_plan"]
+        plan_today = None
+        if plan and not plan["finished"]:
+            day = plan["plan"][plan["today"] - 1]
+            plan_today = {"day": day["day"], "topic": day["topic"], "activities": day["activities"], "done": plan["today"] in plan["done"]}
+        rows.append(
+            {
+                "_id": project_id,
+                "name": project.get("name", ""),
+                "color": project.get("color", "c0"),
+                "last_opened_at": serialize(project.get("last_opened_at")),
+                "due_cards": overview["due_cards"],
+                "next_step": overview["next_step"],
+                "summary": overview["summary"],
+                "weakest_topic": {"id": weakest["id"], "title": weakest["title"], "mastery": weakest["mastery"]} if weakest else None,
+                "plan_today": plan_today,
+            }
+        )
+    return jsonify({"success": True, "projects": rows, "due_cards": sum(r["due_cards"] for r in rows)})
+
+
 @bp.get("/me")
 @require_auth
 def me():

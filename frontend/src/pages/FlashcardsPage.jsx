@@ -8,9 +8,11 @@ import ScopePicker from '../components/projects/ScopePicker';
 import TopicPicker, { useTopics } from '../components/projects/TopicPicker';
 import FlashcardDeck from '../components/flashcards/FlashcardDeck';
 import StaleNotice from '../components/projects/StaleNotice';
+import PracticeNav from '../components/projects/PracticeNav';
 import EmptyState from '../components/ui/EmptyState';
 import { PageLoader } from '../components/common/LoadingSpinner';
 import { newerDocuments } from '../utils/time';
+import { cardPayload } from '../utils/progress';
 
 const Deck = ({ projectId, documents }) => {
   const { addNotification } = useApp();
@@ -23,6 +25,8 @@ const Deck = ({ projectId, documents }) => {
   const topicId = !topicsLoaded || topicTitles[wantedTopic] ? wantedTopic : '';
   const [flashcards, setFlashcards] = useState([]);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [schedule, setSchedule] = useState({});
+  const [ratings, setRatings] = useState(0); // bumps the due-count badge after each rating
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [numCards, setNumCards] = useState(10);
@@ -44,6 +48,7 @@ const Deck = ({ projectId, documents }) => {
       const res = await flashcardsAPI.getFlashcards(projectId, documentId || null, topicId || null);
       setFlashcards(res.data.flashcards || []);
       setGeneratedAt(res.data.generated_at || null);
+      setSchedule(res.data.schedule || {});
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not load flashcards', message: errorMessage(error) });
     } finally {
@@ -61,12 +66,27 @@ const Deck = ({ projectId, documents }) => {
       const res = await flashcardsAPI.generate({ projectId, documentId: documentId || null, topicId: topicId || null, num_cards: numCards });
       setFlashcards(res.data.flashcards || []);
       setGeneratedAt(res.data.generated_at || new Date().toISOString());
+      setSchedule({});
     } catch (error) {
       addNotification({ type: 'error', title: 'Could not generate flashcards', message: errorMessage(error) });
     } finally {
       setGenerating(false);
     }
   };
+
+  // Save a rating: it schedules the card's next review and counts towards the topic's mastery.
+  const rate = useCallback(
+    async (card, rating) => {
+      try {
+        const res = await flashcardsAPI.review(projectId, cardPayload(card), rating, documentId || null);
+        setSchedule((prev) => ({ ...prev, [res.data.card_id]: { due_at: res.data.due_at, last_rating: res.data.last_rating } }));
+        setRatings((n) => n + 1);
+      } catch (error) {
+        addNotification({ type: 'error', title: 'Could not save your rating', message: errorMessage(error) });
+      }
+    },
+    [projectId, documentId, addNotification]
+  );
 
   // Topic names on the cards; memoised so the deck doesn't reset on every render.
   const cards = useMemo(
@@ -78,6 +98,8 @@ const Deck = ({ projectId, documents }) => {
   const missing = documentId ? [] : newerDocuments(documents, generatedAt);
 
   const pickers = (
+    <>
+    <PracticeNav projectId={projectId} refreshKey={ratings} />
     <div className="mx-auto mb-6 grid max-w-2xl gap-4 sm:grid-cols-2">
       {topicsLoaded && (
         <TopicPicker id="cards-topic" label="Topic" projectId={projectId} topics={topics} value={topicId} onChange={(id) => setParam('topic', id)} />
@@ -86,6 +108,7 @@ const Deck = ({ projectId, documents }) => {
         <ScopePicker id="cards-scope" label="Deck for" documents={documents} value={documentId} onChange={(id) => setParam('document', id)} />
       )}
     </div>
+    </>
   );
 
   if (loading) return <PageLoader />;
@@ -129,7 +152,7 @@ const Deck = ({ projectId, documents }) => {
           <StaleNotice what="deck" documents={missing} onRegenerate={generate} />
         </div>
       )}
-      <FlashcardDeck flashcards={cards} />
+      <FlashcardDeck flashcards={cards} onRate={rate} schedule={schedule} />
       <div className="mt-10 text-center">
         <button type="button" onClick={generate} className="btn btn-ghost btn-sm">
           <RefreshCw className="h-3.5 w-3.5" />

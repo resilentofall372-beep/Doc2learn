@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppProvider } from './contexts/AppContext';
 import { SocketProvider } from './contexts/SocketContext';
@@ -16,6 +16,8 @@ import QuizPage from './pages/QuizPage';
 import FlashcardsPage from './pages/FlashcardsPage';
 import MindMapPage from './pages/MindMapPage';
 import TopicsPage from './pages/TopicsPage';
+import OverviewPage from './pages/OverviewPage';
+import ReviewPage from './pages/ReviewPage';
 import ChatPage from './pages/ChatPage';
 import StudyRooms from './pages/StudyRooms';
 import RoomPage from './pages/RoomPage';
@@ -28,6 +30,13 @@ const PublicRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   if (loading) return <PageLoader />;
   return !isAuthenticated ? children : <Navigate to="/projects" replace />;
+};
+
+// Old links (e.g. /tutor) keep working: send them to the new tab, keeping the query string.
+const RedirectInProject = ({ to }) => {
+  const { projectId } = useParams();
+  const { search } = useLocation();
+  return <Navigate to={`/projects/${projectId}/${to}${search}`} replace />;
 };
 
 const protectedPage = (element) => (
@@ -50,10 +59,15 @@ function App() {
 
               {/* A user's projects, and everything inside one. */}
               <Route path="/projects" element={protectedPage(<Projects />)} />
-              <Route path="/projects/:projectId" element={protectedPage(<ProjectDocuments />)} />
-              <Route path="/projects/:projectId/tutor" element={protectedPage(<ChatPage />)} />
+              {/* Tabs, in study order: Overview · Learn · Practice (quiz, flashcards, review) · Map · Documents */}
+              <Route path="/projects/:projectId" element={protectedPage(<OverviewPage />)} />
+              <Route path="/projects/:projectId/learn" element={protectedPage(<ChatPage />)} />
+              <Route path="/projects/:projectId/tutor" element={<RedirectInProject to="learn" />} />
+              <Route path="/projects/:projectId/practice" element={<RedirectInProject to="quiz" />} />
               <Route path="/projects/:projectId/quiz" element={protectedPage(<QuizPage />)} />
               <Route path="/projects/:projectId/flashcards" element={protectedPage(<FlashcardsPage />)} />
+              <Route path="/projects/:projectId/review" element={protectedPage(<ReviewPage />)} />
+              <Route path="/projects/:projectId/documents" element={protectedPage(<ProjectDocuments />)} />
               <Route path="/projects/:projectId/map" element={protectedPage(<MindMapPage />)} />
               <Route path="/projects/:projectId/topics" element={protectedPage(<TopicsPage />)} />
 

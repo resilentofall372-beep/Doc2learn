@@ -13,6 +13,7 @@ from ..access import owned_project
 from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import PROJECT_CONTENT, Collections, get_db
+from ..services.progress import project_overview
 from ..utils import clean_str, serialize
 from .stats import compute_stats
 
@@ -141,3 +142,20 @@ def delete_project(project_id):
 def project_stats(project_id):
     owned_project(project_id, {"_id": 1})
     return jsonify({"success": True, "stats": compute_stats(g.user_id, project_id)})
+
+
+@bp.get("/<project_id>/overview")
+@require_auth
+def project_overview_route(project_id):
+    """Progress per topic, cards due, the next step, quiz stats and the saved study plan."""
+    from .assistant import saved_plan
+
+    owned_project(project_id, {"_id": 1})
+    return jsonify(
+        {
+            "success": True,
+            **project_overview(g.user_id, project_id),
+            "stats": compute_stats(g.user_id, project_id),
+            **saved_plan(g.user_id, project_id),
+        }
+    )

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { STATUS } from '../../utils/progress';
 
 // Horizontal tree: central topic on the left, branches in the middle, subtopics on the right.
 const COL_X = [0, 290, 590];
@@ -34,7 +35,7 @@ const curve = (x1, y1, x2, y2) => {
   return `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
 };
 
-const Node = ({ x, y, width, text, level, active, dimmed, onClick }) => {
+const Node = ({ x, y, width, text, level, active, dimmed, onClick, progress }) => {
   const styles = [
     'bg-primary-600 text-white border-primary-600 font-semibold text-sm',
     'bg-white text-zinc-900 border-zinc-300 font-medium text-sm dark:bg-zinc-800 dark:text-zinc-50 dark:border-zinc-600',
@@ -50,13 +51,19 @@ const Node = ({ x, y, width, text, level, active, dimmed, onClick }) => {
           active ? 'ring-2 ring-primary-500 ring-offset-2 dark:ring-offset-zinc-900' : ''
         } ${dimmed ? 'opacity-35' : ''}`}
       >
+        {progress && <span className={`mr-2 h-2 w-2 flex-shrink-0 rounded-full ${STATUS[progress.status]?.dot || ''}`} />}
         <span className="truncate">{text}</span>
+        {progress?.mastery != null && <span className="ml-auto pl-2 text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">{progress.mastery}%</span>}
       </button>
     </foreignObject>
   );
 };
 
-const MindMapCanvas = ({ mindmap }) => {
+/**
+ * `progressFor(text)` (optional) returns {status, mastery} for a branch that matches an outline
+ * topic, so branches show how well each part is known.
+ */
+const MindMapCanvas = ({ mindmap, progressFor }) => {
   const [focus, setFocus] = useState(null);
   const { placed, rootY, height } = useMemo(() => layout(mindmap), [mindmap]);
   const width = COL_X[2] + NODE_W[2] + PAD;
@@ -87,6 +94,7 @@ const MindMapCanvas = ({ mindmap }) => {
               text={branch.text}
               active={focus === branch.id}
               dimmed={focus && focus !== branch.id}
+              progress={progressFor ? progressFor(branch.text) : null}
               onClick={() => setFocus(focus === branch.id ? null : branch.id)}
             />
             {branch.children.map((child) => (
@@ -104,7 +112,17 @@ const MindMapCanvas = ({ mindmap }) => {
           </g>
         ))}
       </svg>
-      <p className="muted mt-4 text-center text-xs">Click a branch to highlight it. Click the centre topic to reset.</p>
+      {progressFor && (
+        <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
+          {Object.entries(STATUS).map(([key, s]) => (
+            <span key={key} className="muted inline-flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+              {s.label}
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="muted mt-3 text-center text-xs">Click a branch to highlight it. Click the centre topic to reset.</p>
     </div>
   );
 };

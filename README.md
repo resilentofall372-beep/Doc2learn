@@ -5,6 +5,9 @@ Turn your own study material into a tutor that stays honest.
 Create a **project** for each subject, upload your lecture notes, chapters or slides into it (several files at once, or pasted text), and Doc2Learn gives you:
 
 - **A topic outline** that splits the project into topics in learning order. You can edit it, and it grows as you add documents. Every quiz question and flashcard is labelled with its topic, and each topic has its own quiz and deck.
+- **An Overview with a clear next step.** Each topic shows its mastery (from quiz answers and flashcard ratings) and a Learn → Practice → Review → Test path. The page always names the single most useful thing to do now.
+- **Spaced repetition.** Rate each flashcard Again / Hard / Good / Easy; it comes back in Review just before you would forget it.
+- **A study plan that follows your progress**, saved per project, with today's tasks to tick off. The Projects page has a **Today** panel across all projects.
 - **A grounded study tutor** that searches every document in the project, cites the file and page it used, and says plainly when your documents do not cover a question instead of guessing.
 - **Quizzes** at three difficulty levels, across the whole project or one document, graded on the server with an explanation and source for every question.
 - **Flashcards** and a **concept map**, for the whole project or one document.
@@ -30,7 +33,7 @@ These are deliberate starting points for studying how learners calibrate trust i
 ## How it fits together
 
 ```
-Home page ─▶ Log in / Sign up ─▶ Projects ─▶ a project: Documents · Topics · Tutor · Quiz · Flashcards · Concept map
+Home page ─▶ Log in / Sign up ─▶ Projects ─▶ a project: Overview · Learn · Practice (Quiz · Flashcards · Review) · Map · Documents
 
 React (Vite, Tailwind)  ──/api──▶  Flask API  ──▶  MongoDB
         │                              │
@@ -64,6 +67,8 @@ MongoDB, database `doc2learn`. Every row a user owns carries `user_id`, and proj
 | `quizzes`, `quiz_attempts` | generated questions; graded attempts with score and time. `document_id: null` means the whole project |
 | `flashcards`, `mindmaps` | generated decks and concept maps, per project or per document (decks also per topic) |
 | `topics` | one outline per project: ordered topics (stable `id`, title, summary, key ideas, source pages) and the documents already read into it |
+| `card_reviews` | one row per flashcard a learner has rated: a copy of the card, its topic, and its schedule (`ease`, `interval_days`, `due_at`) |
+| `study_plans` | the latest whole-project study plan, and which days are done |
 | `chat_sessions` | one tutor conversation per user and project |
 | `rooms` | live quiz rooms, their players and questions |
 
@@ -171,6 +176,5 @@ docker-compose.yml
 ## Roadmap
 
 - A user study comparing cited and uncited tutor answers for how often learners verify, and how accurate they end up.
-- Spaced repetition scheduling for flashcards, based on the known and unknown marks learners already give.
 - Teacher view for live rooms with per-question accuracy, to spot concepts a class finds hard.
 - Sharing a project with classmates (read-only), with per-user progress.

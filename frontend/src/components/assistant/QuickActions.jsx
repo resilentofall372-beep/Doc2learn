@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Check, ChevronRight, Copy, FileText, History, Lightbulb, PenLine, RotateCw, Sparkles, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { assistantAPI, errorMessage } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import RichText, { sourceLabel } from '../ui/RichText';
@@ -271,8 +272,8 @@ const ToolFields = ({ tool, options, setOptions, topics }) => {
 };
 
 // --------------------------------------------------------------------------- dialog
-const StudyToolDialog = ({ tool, projectId, documents, topics, initial, onClose, onResult }) => {
-  const [options, setOptions] = useState(() => initial?.options || tool.options);
+const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, onClose, onResult }) => {
+  const [options, setOptions] = useState(() => initial?.options || { ...tool.options, ...(preset || {}) });
   const [documentId, setDocumentId] = useState(initial?.documentId || '');
   const [result, setResult] = useState(initial || null);
   const [loading, setLoading] = useState(false);
@@ -402,8 +403,18 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, onClose,
 /** Study tools for a project: a list of tools, and what you made with them this visit. */
 const QuickActions = ({ projectId, documents }) => {
   const { topics } = useTopics(projectId);
-  const [open, setOpen] = useState(null); // { toolId, entry? }
+  const [open, setOpen] = useState(null); // { toolId, entry?, preset? }
   const [recent, setRecent] = useState([]);
+  const [params, setParams] = useSearchParams();
+
+  // Links like ?tool=explain&concept=Calvin%20cycle open a tool ready to run (from Overview or quiz results).
+  useEffect(() => {
+    const toolId = params.get('tool');
+    if (!toolById[toolId]) return;
+    const text = params.get('concept') || '';
+    setOpen({ toolId, preset: text ? { text } : {} });
+    setParams({}, { replace: true });
+  }, [params, setParams]);
 
   const close = useCallback(() => setOpen(null), []);
   const openTool = open ? toolById[open.toolId] : null;
@@ -483,6 +494,7 @@ const QuickActions = ({ projectId, documents }) => {
           documents={documents}
           topics={topics}
           initial={open.entry}
+          preset={open.preset}
           onClose={close}
           onResult={(entry) => setRecent((prev) => [entry, ...prev].slice(0, 12))}
         />

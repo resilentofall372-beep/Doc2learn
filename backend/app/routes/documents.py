@@ -166,7 +166,7 @@ def delete_document(document_id):
     db[Collections.DOCUMENTS].delete_one({"_id": doc["_id"]})
     retrieval.delete_index(document_id)
     # Things generated from just this document go with it; whole-project ones stay.
-    for name in (Collections.QUIZZES, Collections.QUIZ_ATTEMPTS, Collections.FLASHCARDS, Collections.MINDMAPS):
+    for name in (Collections.QUIZZES, Collections.QUIZ_ATTEMPTS, Collections.FLASHCARDS, Collections.MINDMAPS, Collections.CARD_REVIEWS):
         db[name].delete_many({"document_id": document_id, "user_id": g.user_id})
     if doc.get("project_id"):
         drop_document(doc["project_id"], g.user_id, document_id)
