@@ -99,6 +99,21 @@ def test_edit_outline_and_delete_document(client, document):
     assert [t["title"] for t in left] == ["My own topic"]
 
 
+def test_not_covered_answers_are_low_confidence():
+    from app.services.generation import _confidence
+
+    used = [{"doc": 1, "page": 1}]
+    for answer in (
+        "The provided documents do not contain information regarding the capital of Andhra Pradesh.",
+        "This isn't mentioned in your notes.",
+        "I couldn't find anything about that in the excerpts.",
+        "There is no information about tax law here.",
+    ):
+        assert _confidence(used, answer, []) == "low", answer
+    assert _confidence(used, "Chlorophyll absorbs light [Doc 1, Page 1].", [{"doc": 1}]) == "high"
+    assert _confidence(used, "Chlorophyll absorbs light.", []) == "medium"
+
+
 def test_outline_is_private(client, document, auth):
     headers, _, _, project_id = document
     client.post("/api/topics/build", json={"project_id": project_id}, headers=headers)

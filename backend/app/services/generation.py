@@ -65,9 +65,22 @@ def _as_list(value, limit: int) -> list:
     return []
 
 
+# How the tutor says the documents don't answer the question ("The documents do not contain...",
+# "isn't mentioned", "I couldn't find..."), in the many ways a model phrases it.
+_NOT_COVERED_RE = re.compile(
+    r"\b(?:do|does|did)(?:\s+not|n't)\s+(?:contain|cover|mention|include|discuss|provide|say|address|explain|describe)"
+    r"|\b(?:is|are|was|were)(?:\s+not|n't)\s+(?:covered|mentioned|included|discussed|addressed|explained|described)"
+    r"|\b(?:cannot|can't|could\s+not|couldn't|unable\s+to)\s+find"
+    r"|\bno\s+(?:information|mention|details?)\b"
+    r"|\bnot\s+(?:covered|mentioned|discussed)\b"
+    r"|\boutside\s+(?:the|your|these)\s+(?:documents?|material|excerpts)",
+    re.IGNORECASE,
+)
+
+
 def _confidence(used: list, answer: str, cited: list) -> str:
-    lowered = answer.lower()
-    if any(p in lowered for p in ("does not contain", "doesn't contain", "not covered", "cannot find", "no information", "don't cover", "do not cover")):
+    # Only judge the opening: a grounded answer may still note a small gap near the end.
+    if _NOT_COVERED_RE.search(answer[:400]) and not cited:
         return "low"
     if used and cited:
         return "high"
@@ -311,11 +324,13 @@ def chat(scope: dict, question: str, history: list[dict]) -> dict:
     )
     answer = complete(messages, temperature=0.3)
     cited = _refs_from(answer, legend)
+    confidence = _confidence(used, answer, cited)
     return {
         "answer": answer,
-        "sources": cited or used,
+        # When the documents don't answer it, the excerpts that were searched aren't sources.
+        "sources": [] if confidence == "low" else cited or used,
         "legend": legend,
-        "confidence": _confidence(used, answer, cited),
+        "confidence": confidence,
     }
 
 

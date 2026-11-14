@@ -139,6 +139,14 @@
   }
 }
 
+/* Horizontal strips (project tabs) that scroll on small screens without showing a scrollbar */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* 3D flip for flashcards */
 .flip-scene {
   perspective: 1200px;

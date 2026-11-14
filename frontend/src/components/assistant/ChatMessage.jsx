@@ -23,8 +23,12 @@ const ChatMessage = ({ message }) => {
   }
 
   // Older messages stored sources as plain page numbers; newer ones as {filename, page}.
-  const sources = (message.metadata?.sources || []).map((s) => (typeof s === 'number' ? { page: s } : s));
   const confidence = CONFIDENCE[message.metadata?.confidence];
+  // An answer the documents don't cover has no real sources, only the excerpts that were searched.
+  const sources =
+    message.metadata?.confidence === 'low'
+      ? []
+      : (message.metadata?.sources || []).map((s) => (typeof s === 'number' ? { page: s } : s));
 
   return (
     <div className="flex gap-3">

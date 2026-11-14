@@ -119,7 +119,7 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
         </div>
       </div>
 
-      <nav className="-mx-1 mt-6 flex gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800" aria-label="Project sections">
+      <nav className="no-scrollbar -mx-1 mt-6 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-200 dark:border-zinc-800" aria-label="Project sections">
         {TABS.map(({ path, label, icon: Icon, end }) => (
           <NavLink
             key={label}
