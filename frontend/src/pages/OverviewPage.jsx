@@ -280,17 +280,19 @@ const Overview = ({ projectId, documents, addDocuments }) => {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatsCard
           title="Topics mastered"
+          tone="success"
           value={summary.topics ? `${summary.mastered} / ${summary.topics}` : '—'}
           icon={CircleCheck}
           hint={summary.topics ? `${summary.started} started` : 'Build the outline to track topics'}
         />
         <StatsCard
           title="Average mastery"
+          tone="primary"
           value={summary.average_mastery == null ? '—' : `${summary.average_mastery}%`}
           icon={Target}
           hint={summary.average_mastery == null ? 'Quizzes and card ratings count' : 'Across started topics'}
         />
-        <StatsCard title="Cards due" value={data.due_cards} icon={Repeat} hint={data.due_cards ? 'Review them today' : 'All caught up'} />
+        <StatsCard title="Cards due" value={data.due_cards} icon={Repeat} tone={data.due_cards ? 'warning' : 'neutral'} hint={data.due_cards ? 'Review them today' : 'All caught up'} />
         <StatsCard
           title="Quiz average"
           value={stats.quizzes_taken ? `${stats.average_score}%` : '—'}

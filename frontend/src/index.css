@@ -52,10 +52,10 @@
 
   /* Surfaces */
   .card {
-    @apply rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900;
+    @apply rounded-xl border border-zinc-200/90 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none;
   }
   .card-header {
-    @apply flex items-center justify-between gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800;
+    @apply flex items-center justify-between gap-4 border-b border-zinc-200 px-5 py-3.5 dark:border-zinc-800;
   }
   .card-title {
     @apply text-sm font-semibold text-zinc-900 dark:text-zinc-100;

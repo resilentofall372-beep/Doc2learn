@@ -1,60 +1,85 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
-import { ChevronLeft, FileText, FolderOpen, LayoutDashboard, ListChecks, MessageSquareText, Network, Plus, Radio, Upload } from 'lucide-react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { ChevronRight, FolderOpen, Plus, Radio, Upload } from 'lucide-react';
 import { errorMessage, projectAPI } from '../../services/api';
-import { colorFor } from '../ui/Avatar';
+import { projectStore } from '../../services/projectStore';
 import EmptyState from '../ui/EmptyState';
 import { PageLoader } from '../common/LoadingSpinner';
 import AddDocumentsDialog from '../document/AddDocumentsDialog';
+import { SECTIONS, sectionFor } from './sections';
 
-// The study flow, left to right. `also` lists other pages that belong to the same tab.
-const TABS = [
-  { path: '', label: 'Overview', icon: LayoutDashboard, also: ['/topics'] },
-  { path: '/learn', label: 'Learn', icon: MessageSquareText, also: ['/tutor'] },
-  { path: '/quiz', label: 'Practice', icon: ListChecks, also: ['/flashcards', '/review'] },
-  { path: '/map', label: 'Map', icon: Network },
-  { path: '/documents', label: 'Documents', icon: FileText },
-];
+export const forgetProject = (projectId) => projectStore.forget(projectId);
 
-const isActiveTab = (tab, pathname, base) => {
-  const rest = pathname.slice(base.length).replace(/\/$/, '');
-  return [tab.path, ...(tab.also || [])].some((p) => (p === '' ? rest === '' : rest === p || rest.startsWith(`${p}/`)));
-};
-
-// Small in-memory cache so switching tabs doesn't refetch the project.
-const cache = new Map();
-
-export const forgetProject = (projectId) => cache.delete(projectId);
+/** Section tabs for small screens (on large screens the sidebar shows them). */
+const MobileSections = ({ base, current }) => (
+  <nav className="no-scrollbar -mx-4 mb-6 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-200 px-4 dark:border-zinc-800 lg:hidden" aria-label="Project sections">
+    {SECTIONS.map((section) => {
+      const Icon = section.icon;
+      const active = current.key === section.key;
+      return (
+        <Link
+          key={section.key}
+          to={`${base}${section.path}`}
+          aria-current={active ? 'page' : undefined}
+          className={`-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+            active ? 'border-primary-600 text-zinc-900 dark:border-primary-400 dark:text-zinc-50' : 'border-transparent text-zinc-500 dark:text-zinc-400'
+          }`}
+        >
+          <Icon className="h-4 w-4" />
+          {section.label}
+        </Link>
+      );
+    })}
+  </nav>
+);
 
 /**
- * Header and tabs for every page inside a project.
+ * The frame of every page inside a project: loads the project, shows the page header
+ * (breadcrumb, title, description, actions) and the "Add documents" dialog.
  * `children` may be a node, or a function receiving
- * { project, documents, setDocuments, refresh, addDocuments } (addDocuments opens the upload dialog).
- * Study tabs (needsDocuments) show a prompt to upload first when the project is empty.
+ * { project, documents, setDocuments, refresh, addDocuments }.
+ * Study pages (needsDocuments) ask for a document first when the project is empty.
  */
-const ProjectLayout = ({ children, needsDocuments = true }) => {
+const ProjectLayout = ({ children, needsDocuments = true, actions = null }) => {
   const { projectId } = useParams();
   const { pathname } = useLocation();
-  const [data, setData] = useState(() => cache.get(projectId) || null);
+  const [params, setParams] = useSearchParams();
+  const [data, setData] = useState(() => projectStore.get(projectId));
   const [error, setError] = useState(null);
   const [adding, setAdding] = useState(false);
+
+  const save = useCallback(
+    (next) => {
+      projectStore.set(projectId, next);
+      setData(next);
+    },
+    [projectId]
+  );
 
   const refresh = useCallback(async () => {
     try {
       const res = await projectAPI.get(projectId);
-      const next = { project: res.data.project, documents: res.data.documents || [] };
-      cache.set(projectId, next);
-      setData(next);
+      save({ project: res.data.project, documents: res.data.documents || [] });
       setError(null);
     } catch (err) {
       setError(errorMessage(err, 'Could not open this project'));
     }
-  }, [projectId]);
+  }, [projectId, save]);
 
   useEffect(() => {
-    setData(cache.get(projectId) || null);
+    setData(projectStore.get(projectId));
     refresh();
   }, [projectId, refresh]);
+
+  // The sidebar's "Add documents" links here with ?add=1.
+  useEffect(() => {
+    if (params.get('add') === '1') {
+      setAdding(true);
+      const next = new URLSearchParams(params);
+      next.delete('add');
+      setParams(next, { replace: true });
+    }
+  }, [params, setParams]);
 
   const setDocuments = useCallback(
     (update) => {
@@ -62,7 +87,7 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
         if (!prev) return prev;
         const documents = typeof update === 'function' ? update(prev.documents) : update;
         const next = { project: { ...prev.project, document_count: documents.length }, documents };
-        cache.set(projectId, next);
+        projectStore.set(projectId, next);
         return next;
       });
     },
@@ -89,29 +114,33 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
 
   const { project, documents } = data;
   const base = `/projects/${projectId}`;
+  const { section, page } = sectionFor(pathname.slice(base.length));
   const empty = needsDocuments && documents.length === 0;
 
   return (
     <div>
-      <Link to="/projects" className="muted mb-4 inline-flex items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-zinc-100">
-        <ChevronLeft className="h-4 w-4" />
-        Projects
-      </Link>
-
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <span className={`grid h-10 w-10 flex-shrink-0 place-items-center rounded-lg text-base font-semibold text-white ${colorFor(project.color, project.name)}`}>
-            {project.name.slice(0, 1).toUpperCase()}
-          </span>
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-tight" title={project.name}>{project.name}</h1>
-            <p className="muted mt-0.5 truncate text-sm">
-              {documents.length} {documents.length === 1 ? 'document' : 'documents'}
-              {project.description ? ` · ${project.description}` : ''}
-            </p>
-          </div>
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <nav className="muted mb-1.5 flex min-w-0 items-center gap-1 text-xs" aria-label="Breadcrumb">
+            <Link to="/projects" className="hover:text-zinc-900 dark:hover:text-zinc-100">Projects</Link>
+            <ChevronRight className="h-3 w-3 flex-shrink-0" />
+            <Link to={base} className="truncate hover:text-zinc-900 dark:hover:text-zinc-100" title={project.name}>{project.name}</Link>
+            {page.title !== 'Overview' && (
+              <>
+                <ChevronRight className="h-3 w-3 flex-shrink-0" />
+                <span className="truncate">{section.key === 'practice' ? 'Practice' : page.title}</span>
+              </>
+            )}
+          </nav>
+          <h1 className="truncate text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            {page.title === 'Overview' ? project.name : page.title}
+          </h1>
+          <p className="muted mt-1 max-w-2xl text-sm">
+            {page.title === 'Overview' && project.description ? project.description : page.description}
+          </p>
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+          {actions}
           {documents.length > 0 && (
             <Link to={`/create-quiz-room?project=${projectId}`} className="btn btn-secondary">
               <Radio className="h-4 w-4" />
@@ -123,51 +152,29 @@ const ProjectLayout = ({ children, needsDocuments = true }) => {
             Add documents
           </button>
         </div>
-      </div>
+      </header>
 
-      <nav className="no-scrollbar -mx-1 mt-6 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-200 dark:border-zinc-800" aria-label="Project sections">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const active = isActiveTab(tab, pathname, base);
-          return (
-            <Link
-              key={tab.label}
-              to={`${base}${tab.path}`}
-              aria-current={active ? 'page' : undefined}
-              className={`-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                active
-                  ? 'border-primary-600 text-zinc-900 dark:border-primary-400 dark:text-zinc-50'
-                  : 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 dark:text-zinc-400 dark:hover:border-zinc-600 dark:hover:text-zinc-200'
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </Link>
-          );
-        })}
-      </nav>
+      <MobileSections base={base} current={section} />
 
-      <div className="pt-6">
-        {empty ? (
-          <div className="card">
-            <EmptyState
-              icon={Upload}
-              title="Add a document first"
-              description="Upload notes, slides or a chapter to this project (or paste text), then study it here."
-              action={
-                <button type="button" onClick={addDocuments} className="btn btn-primary">
-                  <Plus className="h-4 w-4" />
-                  Add documents
-                </button>
-              }
-            />
-          </div>
-        ) : typeof children === 'function' ? (
-          children({ project, documents, setDocuments, refresh, addDocuments })
-        ) : (
-          children
-        )}
-      </div>
+      {empty ? (
+        <div className="card">
+          <EmptyState
+            icon={Upload}
+            title="Add a document first"
+            description="Upload notes, slides or a chapter to this project (or paste text), then study it here."
+            action={
+              <button type="button" onClick={addDocuments} className="btn btn-primary">
+                <Plus className="h-4 w-4" />
+                Add documents
+              </button>
+            }
+          />
+        </div>
+      ) : typeof children === 'function' ? (
+        children({ project, documents, setDocuments, refresh, addDocuments })
+      ) : (
+        children
+      )}
 
       <AddDocumentsDialog
         open={adding}

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronRight, Copy, FileText, History, Lightbulb, PenLine, RotateCw, Sparkles, X } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Copy, FileText, History, Lightbulb, PenLine, RotateCw, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { assistantAPI, errorMessage } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
+import Dialog from '../ui/Dialog';
 import RichText, { sourceLabel } from '../ui/RichText';
 import Segmented from '../ui/Segmented';
 import ScopePicker from '../projects/ScopePicker';
@@ -279,14 +280,6 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
-  const Icon = tool.icon;
-
-  useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const ready = !tool.required || options.text?.trim();
 
   const run = async (e) => {
@@ -331,25 +324,8 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-labelledby="tool-title">
-      <div className="absolute inset-0 bg-zinc-950/40" onClick={onClose} />
-      <div className="card relative flex max-h-[92vh] w-full max-w-3xl animate-fade-in flex-col shadow-xl">
-        <div className="card-header">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-primary-50 text-primary-700 dark:bg-primary-500/15 dark:text-primary-300">
-              <Icon className="h-4 w-4" />
-            </span>
-            <div className="min-w-0">
-              <h2 id="tool-title" className="card-title">{tool.name}</h2>
-              <p className="muted truncate text-xs">{tool.description}</p>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} className="btn btn-ghost btn-icon -mr-2" aria-label="Close">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="overflow-y-auto">
+    <Dialog open onClose={onClose} size="lg" icon={tool.icon} title={tool.name} description={tool.description}>
+        <div>
           <form onSubmit={run} className="space-y-5 border-b border-zinc-200 p-5 dark:border-zinc-800">
             {documents.length > 1 && (
               <ScopePicker id="tool-scope" label="Use" documents={documents} value={documentId} onChange={setDocumentId} />
@@ -394,8 +370,7 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };
 
