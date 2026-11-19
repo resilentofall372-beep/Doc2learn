@@ -147,6 +147,44 @@ npm install
 npm run dev                   # http://localhost:5173, proxies /api to the backend
 ```
 
+## Deploy online (Vercel + Render + MongoDB Atlas)
+
+The React frontend is a static site and runs on **Vercel**. The Flask API can't run on Vercel's serverless functions: live rooms need a long-lived WebSocket, and the server also uses Tesseract OCR, a local embedding model and model calls of up to three minutes. So the API runs as a Docker service on **Render** (free tier supports WebSockets), and the data lives in **MongoDB Atlas** (free M0 cluster).
+
+```
+Browser ─▶ Vercel (React build)
+   │
+   ├── HTTPS /api ─────────▶ Render (backend/Dockerfile) ─▶ MongoDB Atlas
+   └── WebSocket /socket.io ▶        "          "        ─▶ Gemini
+```
+
+**1. Database (MongoDB Atlas)**
+1. Create a free M0 cluster at https://cloud.mongodb.com.
+2. *Database Access*: add a user with a password. *Network Access*: allow `0.0.0.0/0` (Render's free tier has no fixed IP).
+3. *Connect → Drivers*: copy the `mongodb+srv://…` string and add `/doc2learn` before the `?`, e.g.
+   `mongodb+srv://USER:PASS@cluster0.xxxx.mongodb.net/doc2learn?retryWrites=true&w=majority`
+
+**2. API (Render)**
+1. Push this repo to GitHub, then on https://render.com: *New → Blueprint* and pick the repo. It reads `render.yaml`.
+2. When asked, fill in `MONGO_URI` (step 1), `LLM_API_KEY` (your Gemini key) and `CORS_ORIGINS`. You don't know the Vercel URL yet, so put `http://localhost:5173` for now.
+3. When the deploy finishes, open `https://<your-service>.onrender.com/api/health`. It should show `"database": "connected"`.
+
+**3. Frontend (Vercel)**
+1. On https://vercel.com: *Add New → Project*, import the repo, set **Root Directory** to `frontend`. Vite is detected automatically, and `frontend/vercel.json` makes page refreshes on routes like `/projects/…` work.
+2. Add the environment variables (no trailing slash):
+   - `VITE_API_BASE_URL` = `https://<your-service>.onrender.com/api`
+   - `VITE_SOCKET_URL` = `https://<your-service>.onrender.com`
+3. Deploy, and note the address (e.g. `https://doc2learn.vercel.app`).
+
+**4. Connect them**
+On Render, set `CORS_ORIGINS` to your Vercel address (e.g. `https://doc2learn.vercel.app`; separate several with commas) and save, which redeploys. Leave `PUBLIC_URL` unset: invite links then use the Vercel address automatically.
+
+Notes:
+- `VITE_*` values are baked in at build time. After changing them on Vercel, redeploy.
+- Render's free service sleeps after 15 minutes idle, so the first request can take about a minute. Open `/api/health` before a demo to wake it.
+- If Render reports running out of memory, set `EMBEDDINGS_ENABLED=false`. Search then falls back to BM25 keyword retrieval.
+- Vercel preview deployments get different URLs. Add them to `CORS_ORIGINS` if you want them to work too.
+
 ## Tests
 
 ```bash

@@ -24,6 +24,7 @@ COPY . .
 
 EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
-  CMD curl -fsS http://localhost:5000/api/health || exit 1
+  CMD curl -fsS "http://localhost:${PORT:-5000}/api/health" || exit 1
 
-CMD ["gunicorn", "-k", "gthread", "--threads", "32", "-w", "1", "-b", "0.0.0.0:5000", "--timeout", "180", "run:app"]
+# Hosts like Render set $PORT; locally it stays 5000.
+CMD ["sh", "-c", "exec gunicorn -k gthread --threads 32 -w 1 -b 0.0.0.0:${PORT:-5000} --timeout 180 run:app"]
