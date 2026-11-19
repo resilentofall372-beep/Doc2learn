@@ -1,0 +1,32 @@
+# Render Blueprint for the Doc2Learn API (the frontend is hosted on Vercel).
+# Render dashboard → New → Blueprint → pick this repo. Fill in the values marked
+# `sync: false` when Render asks for them. See "Deploy online" in README.md.
+services:
+  - type: web
+    name: doc2learn-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      # MongoDB Atlas connection string, e.g. mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/doc2learn
+      - key: MONGO_URI
+        sync: false
+      # Gemini key from https://aistudio.google.com/apikey
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_MODEL
+        value: gemini-3.1-flash-lite
+      - key: LLM_FALLBACK_MODELS
+        value: gemini-flash-lite-latest,gemini-3.5-flash-lite,gemini-flash-latest
+      - key: LLM_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+      - key: SECRET_KEY
+        generateValue: true
+      # Your Vercel address, e.g. https://doc2learn.vercel.app (no trailing slash)
+      - key: CORS_ORIGINS
+        sync: false
+      # Set to "false" if the free 512 MB instance runs out of memory; search then uses BM25 keywords.
+      - key: EMBEDDINGS_ENABLED
+        value: "true"
