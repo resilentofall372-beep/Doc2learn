@@ -103,15 +103,6 @@ def embed(texts: list[str]) -> list[list[float]] | None:
     return [vector.tolist() for vector in model.embed(texts, batch_size=32)]
 
 
-def embeddings_status() -> dict:
-    return {
-        "enabled": bool(current_app.config["EMBEDDINGS_ENABLED"]),
-        "loaded": _embedder["model"] is not None,
-        "model": _embedder["name"] or current_app.config["EMBEDDING_MODEL"],
-        "fallback": "bm25",
-    }
-
-
 # --------------------------------------------------------------------------- indexing
 def index_document(document_id: str, project_id: str, filename: str, text: str, pages: list[dict]) -> dict:
     cfg = current_app.config

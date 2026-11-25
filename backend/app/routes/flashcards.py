@@ -8,12 +8,13 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
-from ..access import owned_project, resolve_scope
+from ..access import owned_project_id, resolve_scope
 from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import Collections, get_db
 from ..services import srs
 from ..utils import clamp, clean_str, serialize
+from .topics import topic_list
 
 bp = Blueprint("flashcards", __name__)
 
@@ -72,8 +73,7 @@ def latest():
 def review():
     """Rate one card. Body: {project_id, rating, card: {id, front, back, topic_id?, source_document?, source_page?}, document_id?}"""
     data = request.get_json(silent=True) or {}
-    project = owned_project(data.get("project_id"), {"_id": 1})
-    project_id = str(project["_id"])
+    project_id = owned_project_id(data.get("project_id"))
     rating = data.get("rating")
     if rating not in srs.RATINGS:
         raise ApiError(f"rating must be one of {', '.join(srs.RATINGS)}")
@@ -86,8 +86,7 @@ def review():
     db = get_db()
     topic_id = card.get("topic_id") if isinstance(card.get("topic_id"), str) else None
     if topic_id:
-        outline = db[Collections.TOPICS].find_one({"project_id": project_id, "user_id": g.user_id}, {"topics.id": 1}) or {}
-        if topic_id not in {t["id"] for t in outline.get("topics", [])}:
+        if topic_id not in {t["id"] for t in topic_list(project_id, g.user_id)}:
             topic_id = None  # unknown topics aren't stored
     source = card.get("source_document") if isinstance(card.get("source_document"), dict) else None
 
@@ -119,8 +118,7 @@ def review():
 @require_auth
 def due():
     """Cards due now in ?project_id=... (optionally &topic_id=...), most overdue first."""
-    project = owned_project(request.args.get("project_id"), {"_id": 1})
-    query = {"user_id": g.user_id, "project_id": str(project["_id"]), "due_at": {"$lte": _utcnow()}}
+    query = {"user_id": g.user_id, "project_id": owned_project_id(request.args.get("project_id")), "due_at": {"$lte": _utcnow()}}
     if request.args.get("topic_id"):
         query["topic_id"] = request.args["topic_id"]
     limit = clamp(request.args.get("limit"), 1, 200, 100)

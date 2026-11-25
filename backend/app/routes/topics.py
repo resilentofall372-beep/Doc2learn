@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from flask import Blueprint, g, jsonify, request
 
-from ..access import owned_project, touch_project
+from ..access import owned_project_id, touch_project
 from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import Collections, get_db
@@ -81,6 +81,11 @@ def _new_id() -> str:
     return str(ObjectId())
 
 
+def _new_topic(item: dict) -> dict:
+    """A fresh outline topic from a generated outline item."""
+    return {"id": _new_id(), "title": item["title"], "summary": item["summary"], "subtopics": item["subtopics"], "sources": _source_of(item)}
+
+
 def _source_of(item: dict) -> list[dict]:
     doc = item.get("source_document")
     if not doc:
@@ -131,8 +136,7 @@ def _payload(project_id: str, row: dict | None) -> dict:
 @require_auth
 def get_outline():
     """The outline for ?project_id=..., plus documents added since it was built."""
-    project = owned_project(request.args.get("project_id"), {"_id": 1})
-    project_id = str(project["_id"])
+    project_id = owned_project_id(request.args.get("project_id"))
     return jsonify(_payload(project_id, outline_for(project_id, g.user_id)))
 
 
@@ -146,8 +150,7 @@ def build():
     mode "rebuild": start over from every document (topic ids change).
     """
     data = request.get_json(silent=True) or {}
-    project = owned_project(data.get("project_id"), {"_id": 1})
-    project_id = str(project["_id"])
+    project_id = owned_project_id(data.get("project_id"))
     mode = "rebuild" if data.get("mode") == "rebuild" else "update"
     db = get_db()
     now = datetime.now(timezone.utc)
@@ -161,16 +164,7 @@ def build():
         generated = generation.generate_outline({"project_id": project_id, "document_id": None})
         if not generated:
             raise ApiError("The model did not produce a usable outline. Try again.", 502)
-        topics = [
-            {
-                "id": _new_id(),
-                "title": t["title"],
-                "summary": t["summary"],
-                "subtopics": t["subtopics"],
-                "sources": _source_of(t),
-            }
-            for t in generated
-        ][:MAX_TOPICS]
+        topics = [_new_topic(t) for t in generated][:MAX_TOPICS]
         db[Collections.TOPICS].update_one(
             {"project_id": project_id, "user_id": g.user_id},
             {
@@ -195,15 +189,7 @@ def build():
                     target["subtopics"] = _merge_subtopics(target.get("subtopics") or [], item["subtopics"])
                     target["sources"] = (target.get("sources") or []) + _source_of(item)
                 elif len(topics) < MAX_TOPICS:
-                    topics.append(
-                        {
-                            "id": _new_id(),
-                            "title": item["title"],
-                            "summary": item["summary"],
-                            "subtopics": item["subtopics"],
-                            "sources": _source_of(item),
-                        }
-                    )
+                    topics.append(_new_topic(item))
             db[Collections.TOPICS].update_one(
                 {"_id": row["_id"]},
                 {"$set": {"topics": topics, "document_ids": sorted(covered | set(new_ids)), "updated_at": now}},
@@ -221,8 +207,7 @@ def save():
     Known ids keep their sources; topics without a known id are new.
     """
     data = request.get_json(silent=True) or {}
-    project = owned_project(data.get("project_id"), {"_id": 1})
-    project_id = str(project["_id"])
+    project_id = owned_project_id(data.get("project_id"))
     row = outline_for(project_id, g.user_id)
     if row is None:
         raise ApiError("Build the outline first", 404)

@@ -66,6 +66,28 @@ def _as_list(value, limit: int) -> list:
     return []
 
 
+def _items(data, key: str, limit: int) -> list:
+    """The list under `key` in the model's JSON (or the JSON itself if it is a bare list)."""
+    return _as_list(data.get(key) if isinstance(data, dict) else data, limit)
+
+
+def _ask(prompt: str, temperature: float, as_json: bool = True):
+    messages = [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}]
+    return (complete_json if as_json else complete)(messages, temperature=temperature)
+
+
+def _menu(topics: list[dict]) -> str:
+    return "\n".join(f"{i}. {t['title']}" for i, t in enumerate(topics, start=1))
+
+
+def _context(scope: dict, focus: str | None, max_chars: int, top_k: int, spread_chars: int | None = None):
+    """(context, legend): excerpts about `focus`, or a spread over the whole scope."""
+    if focus:
+        context, legend, _ = retrieval.context_for(scope, focus, max_chars=max_chars, top_k=top_k)
+        return context, legend
+    return retrieval.spread_context(scope, max_chars=spread_chars) if spread_chars else retrieval.spread_context(scope)
+
+
 # How the tutor says the documents don't answer the question ("The documents do not contain...",
 # "isn't mentioned", "I couldn't find..."), in the many ways a model phrases it.
 _NOT_COVERED_RE = re.compile(
@@ -102,7 +124,7 @@ def _topic_block(topics: list[dict] | None) -> tuple[str, str, str]:
     """
     if not topics:
         return "", "", ""
-    menu = "\n".join(f"{i}. {t['title']}" for i, t in enumerate(topics, start=1))
+    menu = _menu(topics)
     rule = '\n- "topic" is the number of the topic (listed below) that the item is about (integer, or null if none fits).'
     return rule, ', "topic": int|null', f"\n\nTopics in this project:\n{menu}"
 
@@ -131,10 +153,7 @@ def generate_quiz(
     topic_id: str | None = None,
 ) -> list[dict]:
     """`topics` is the project outline (to tag questions); `topic_id` pins every question to one topic."""
-    if focus:
-        context, legend, _ = retrieval.context_for(scope, focus, max_chars=8000, top_k=10)
-    else:
-        context, legend = retrieval.spread_context(scope)
+    context, legend = _context(scope, focus, max_chars=8000, top_k=10)
     guidance = {
         "easy": "recall of definitions and key facts",
         "medium": "understanding and application of the ideas",
@@ -158,12 +177,9 @@ Return JSON: {{"questions": [{{"question": str, "options": {{"A": str, "B": str,
 Excerpts:
 {context}"""
 
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.5,
-    )
+    data = _ask(prompt, 0.5)
     questions = []
-    for raw in _as_list(data.get("questions") if isinstance(data, dict) else data, num_questions):
+    for raw in _items(data, "questions", num_questions):
         if not isinstance(raw, dict):
             continue
         options = raw.get("options")
@@ -197,10 +213,7 @@ def generate_flashcards(
     topic_id: str | None = None,
 ) -> list[dict]:
     """`topics` is the project outline (to tag cards); `topic_id` pins every card to one topic."""
-    if focus:
-        context, legend, _ = retrieval.context_for(scope, focus, max_chars=8000, top_k=10)
-    else:
-        context, legend = retrieval.spread_context(scope)
+    context, legend = _context(scope, focus, max_chars=8000, top_k=10)
     topic_rule, topic_field, topic_menu = _topic_block(None if topic_id else topics)
     prompt = f"""Create {num_cards} study flashcards from the excerpts.{_focus_line(focus)}
 Cover distinct concepts: definitions, key facts, processes, comparisons.
@@ -212,12 +225,9 @@ Return JSON: {{"flashcards": [{{"front": str, "back": str, "source_doc": int|nul
 
 Excerpts:
 {context}"""
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.5,
-    )
+    data = _ask(prompt, 0.5)
     cards = []
-    for raw in _as_list(data.get("flashcards") if isinstance(data, dict) else data, num_cards):
+    for raw in _items(data, "flashcards", num_cards):
         if isinstance(raw, dict) and raw.get("front") and raw.get("back"):
             cards.append(
                 {
@@ -245,7 +255,7 @@ def generate_outline(scope: dict, existing: list[dict] | None = None) -> list[di
     if not context:
         return []
     if existing:
-        menu = "\n".join(f"{i}. {t['title']}" for i, t in enumerate(existing, start=1))
+        menu = _menu(existing)
         merge_rule = f"""
 The project already has these topics:
 {menu}
@@ -266,12 +276,9 @@ Return JSON: {{"outline": [{{"title": str, "summary": str, "subtopics": [str, ..
 
 Excerpts:
 {context}"""
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
+    data = _ask(prompt, 0.3)
     topics = []
-    for raw in _as_list(data.get("outline") if isinstance(data, dict) else data, 15):
+    for raw in _items(data, "outline", 15):
         if not isinstance(raw, dict) or not str(raw.get("title") or "").strip():
             continue
         number = raw.get("existing")
@@ -310,7 +317,7 @@ def generate_mindmap(scope: dict, title: str, topics: list[dict] | None = None) 
     """
     context, _ = retrieval.spread_context(scope, max_chars=9000)
     if topics:
-        menu = "\n".join(f"{i}. {t['title']}" for i, t in enumerate(topics, start=1))
+        menu = _menu(topics)
         branch_rule = f"""Use exactly these topics as the branches, in this order (one branch each, "topic" = its number):
 {menu}"""
         topic_field = "int"
@@ -329,10 +336,7 @@ Return JSON: {{"central_topic": str, "branches": [{{"topic": {topic_field}, "not
 
 Excerpts:
 {context}"""
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.4,
-    )
+    data = _ask(prompt, 0.4)
     if not isinstance(data, dict):
         data = {}
 
@@ -409,10 +413,7 @@ Return JSON: {{"summary": str, "key_points": [str, ...]}}
 
 Excerpts:
 {context}"""
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
+    data = _ask(prompt, 0.3)
     if not isinstance(data, dict):
         data = {"summary": str(data)}
     return {
@@ -431,10 +432,7 @@ and one common misconception. Cite excerpts. If the material does not cover it, 
 
 Excerpts:
 {context or '(no relevant excerpts found)'}"""
-    text = complete(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.4,
-    )
+    text = _ask(prompt, 0.4, as_json=False)
     return {
         "concept": concept,
         "explanation": _strip_fences(text),
@@ -444,22 +442,17 @@ Excerpts:
 
 
 def practice_problems(scope: dict, topic: str, count: int) -> dict:
-    if topic and topic.lower() != "general":
-        context, legend, _ = retrieval.context_for(scope, topic, max_chars=7000, top_k=8)
-    else:
-        context, legend = retrieval.spread_context(scope, max_chars=7000)
+    focus = topic if topic and topic.lower() != "general" else None
+    context, legend = _context(scope, focus, max_chars=7000, top_k=8, spread_chars=7000)
     prompt = f"""Write {count} open-ended practice problems on "{topic}" from the excerpts.
 Each has "question", a "hint" that nudges without giving it away, and a model "answer".
 Return JSON: {{"problems": [{{"question": str, "hint": str, "answer": str}}]}}
 
 Excerpts:
 {context}"""
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.5,
-    )
+    data = _ask(prompt, 0.5)
     problems = []
-    for raw in _as_list(data.get("problems") if isinstance(data, dict) else data, count):
+    for raw in _items(data, "problems", count):
         if isinstance(raw, dict) and raw.get("question"):
             problems.append(
                 {
@@ -516,12 +509,9 @@ Return JSON: {{"plan": [{{"day": int, "topic": str, "activities": [str, ...]}}]}
 
 Excerpts:
 {context}"""
-    data = complete_json(
-        [{"role": "system", "content": SYSTEM_TUTOR}, {"role": "user", "content": prompt}],
-        temperature=0.4,
-    )
+    data = _ask(prompt, 0.4)
     plan = []
-    for i, raw in enumerate(_as_list(data.get("plan") if isinstance(data, dict) else data, days), start=1):
+    for i, raw in enumerate(_items(data, "plan", days), start=1):
         if isinstance(raw, dict):
             plan.append(
                 {

@@ -9,28 +9,29 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
-from ..access import owned_project, resolve_scope
+from ..access import owned_project, owned_project_id, resolve_scope, scope_ids
 from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import Collections, get_db
 from ..services import generation
 from ..services.progress import topic_progress
-from ..utils import clamp, clean_str, to_object_id
+from ..utils import as_utc, clamp, clean_str, to_object_id
+from .topics import topic_list
 
 bp = Blueprint("assistant", __name__)
 
 MAX_HISTORY = 100
 
 
-def _scope_args(scope: dict) -> dict:
-    return {"project_id": scope["project_id"], "document_id": scope["document_id"]}
+
+def _latest_session(project_id: str) -> dict | None:
+    return get_db()[Collections.CHAT_SESSIONS].find_one(
+        {"project_id": project_id, "user_id": g.user_id}, sort=[("created_at", -1)]
+    )
 
 
 def _session(project_id: str) -> dict:
-    db = get_db()
-    session = db[Collections.CHAT_SESSIONS].find_one(
-        {"project_id": project_id, "user_id": g.user_id}, sort=[("created_at", -1)]
-    )
+    session = _latest_session(project_id)
     if session:
         return session
     session = {
@@ -39,7 +40,7 @@ def _session(project_id: str) -> dict:
         "messages": [],
         "created_at": datetime.now(timezone.utc),
     }
-    session["_id"] = db[Collections.CHAT_SESSIONS].insert_one(session).inserted_id
+    session["_id"] = get_db()[Collections.CHAT_SESSIONS].insert_one(session).inserted_id
     return session
 
 
@@ -74,8 +75,7 @@ def chat():
     question = clean_str(data.get("question"), 2000)
     if not question:
         raise ApiError("question is required")
-    project = owned_project(data.get("project_id"), {"_id": 1})
-    project_id = str(project["_id"])
+    project_id = owned_project_id(data.get("project_id"))
 
     session = _session(project_id)
     history = [{"role": m["role"], "content": m["content"]} for m in session.get("messages", [])]
@@ -95,9 +95,7 @@ def chat():
 @require_auth
 def history(project_id):
     owned_project(project_id, {"_id": 1})
-    session = get_db()[Collections.CHAT_SESSIONS].find_one(
-        {"project_id": project_id, "user_id": g.user_id}, sort=[("created_at", -1)]
-    )
+    session = _latest_session(project_id)
     if not session:
         return jsonify({"success": True, "messages": [], "session_id": None})
     return jsonify(
@@ -128,7 +126,7 @@ def summarize():
     data = request.get_json(silent=True) or {}
     scope = resolve_scope(data)
     summary_type = "detailed" if data.get("summary_type") == "detailed" else "brief"
-    return jsonify({"success": True, **generation.summarize(_scope_args(scope), summary_type)})
+    return jsonify({"success": True, **generation.summarize(scope_ids(scope), summary_type)})
 
 
 @bp.post("/explain")
@@ -139,7 +137,7 @@ def explain():
     concept = clean_str(data.get("concept"), 200)
     if not concept:
         raise ApiError("concept is required")
-    return jsonify({"success": True, **generation.explain(_scope_args(scope), concept)})
+    return jsonify({"success": True, **generation.explain(scope_ids(scope), concept)})
 
 
 @bp.post("/practice")
@@ -149,7 +147,7 @@ def practice():
     scope = resolve_scope(data)
     topic = clean_str(data.get("topic"), 200) or "general"
     count = clamp(data.get("num_problems"), 1, 10, 5)
-    return jsonify({"success": True, **generation.practice_problems(_scope_args(scope), topic, count)})
+    return jsonify({"success": True, **generation.practice_problems(scope_ids(scope), topic, count)})
 
 
 @bp.post("/study-plan")
@@ -175,13 +173,13 @@ def study_plan():
     # Whole-project plans follow the outline and the learner's real progress, and are saved.
     progress = None
     if not scope["document_id"]:
-        outline = get_db()[Collections.TOPICS].find_one({"project_id": scope["project_id"], "user_id": g.user_id})
-        if outline and outline.get("topics"):
-            progress = topic_progress(g.user_id, scope["project_id"], outline["topics"])
+        topics = topic_list(scope["project_id"], g.user_id)
+        if topics:
+            progress = topic_progress(g.user_id, scope["project_id"], topics)
             if not weak_areas:
                 weak_areas = [t["title"] for t in weakest_topics(progress)]
 
-    result = generation.study_plan(_scope_args(scope), weak_areas, days, performance, progress)
+    result = generation.study_plan(scope_ids(scope), weak_areas, days, performance, progress)
     if not result["plan"]:
         raise ApiError("The model did not produce a usable plan. Try again.", 502)
     if not scope["document_id"]:
@@ -206,9 +204,7 @@ def plan_payload(row: dict | None) -> dict:
     """A saved plan plus which day of it is today (1-based; past the end means it's finished)."""
     if not row:
         return {"saved_plan": None}
-    created = row["created_at"]
-    if created.tzinfo is None:
-        created = created.replace(tzinfo=timezone.utc)
+    created = as_utc(row["created_at"])
     today = (datetime.now(timezone.utc).date() - created.date()).days + 1
     return {
         "saved_plan": {

@@ -14,9 +14,10 @@ Status per topic:
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 
 from ..extensions import Collections, get_db
+from ..utils import as_utc, utcnow
 
 RECENT_ANSWERS = 20
 MASTERED_AT = 80
@@ -24,26 +25,15 @@ MIN_ANSWERS_FOR_MASTERY = 4
 WEAK_BELOW = 60
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _as_utc(value: datetime | None) -> datetime | None:
-    # PyMongo returns naive datetimes that are UTC.
-    if value is None:
-        return None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
 def due_count(user_id: str, project_id: str, now: datetime | None = None) -> int:
     return get_db()[Collections.CARD_REVIEWS].count_documents(
-        {"user_id": user_id, "project_id": project_id, "due_at": {"$lte": (now or _now()).replace(tzinfo=None)}}
+        {"user_id": user_id, "project_id": project_id, "due_at": {"$lte": (now or utcnow()).replace(tzinfo=None)}}
     )
 
 
 def topic_progress(user_id: str, project_id: str, topics: list[dict], now: datetime | None = None) -> list[dict]:
     """Progress for every topic in the outline, in outline order."""
-    now = now or _now()
+    now = now or utcnow()
     db = get_db()
 
     answers: dict[str, list[bool]] = defaultdict(list)
@@ -66,7 +56,7 @@ def topic_progress(user_id: str, project_id: str, topics: list[dict], now: datet
         bucket["reviewed"] += 1
         if review.get("last_rating") in ("good", "easy"):
             bucket["known"] += 1
-        due = _as_utc(review.get("due_at"))
+        due = as_utc(review.get("due_at"))
         if due and due <= now:
             bucket["due"] += 1
 
@@ -141,7 +131,7 @@ def next_step(*, document_count: int, has_outline: bool, pending_documents: int,
 def project_overview(user_id: str, project_id: str) -> dict:
     """Everything the Overview tab and the Today panel need for one project."""
     db = get_db()
-    now = _now()
+    now = utcnow()
     outline = db[Collections.TOPICS].find_one({"project_id": project_id, "user_id": user_id})
     topics = outline["topics"] if outline else []
     doc_ids = [str(d["_id"]) for d in db[Collections.DOCUMENTS].find({"project_id": project_id, "user_id": user_id}, {"_id": 1})]

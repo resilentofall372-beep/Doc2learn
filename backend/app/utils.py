@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import random
-import string
-from datetime import datetime
+from datetime import datetime, timezone
 
 from bson import ObjectId
 
@@ -49,5 +48,12 @@ def clean_str(value, max_len: int = 200, default: str = "") -> str:
     return value[:max_len] or default
 
 
-def ascii_only(value: str) -> str:
-    return "".join(ch for ch in value if ch in string.printable)
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def as_utc(value: datetime | None) -> datetime | None:
+    """PyMongo returns naive datetimes that are UTC; make them timezone-aware."""
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)

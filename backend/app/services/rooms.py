@@ -13,19 +13,15 @@ import secrets
 import threading
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 
 from ..errors import ApiError
 from ..extensions import Collections, get_db
-from ..utils import random_code
+from ..utils import as_utc, random_code, utcnow
 
 PUBLIC_QUESTION_KEYS = ("question", "options", "source_page")
 
 _locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 def _participant(pid: str, name: str, avatar: str, is_host: bool) -> dict:
@@ -37,7 +33,7 @@ def _participant(pid: str, name: str, avatar: str, is_host: bool) -> dict:
         "score": 0,
         "answers": [],
         "token": secrets.token_urlsafe(16),
-        "joined_at": _now(),
+        "joined_at": utcnow(),
     }
 
 
@@ -173,7 +169,7 @@ def create_room(
         "current_question_index": 0,
         "questions": [],
         "question_started_at": None,
-        "created_at": _now(),
+        "created_at": utcnow(),
         "is_active": True,
     }
     db[Collections.ROOMS].insert_one(room)
@@ -196,7 +192,7 @@ def remove_participant(room: dict, participant_id: str) -> dict:
     with _locks[room["room_id"]]:
         room = _reload(room)
         if participant_id == room["host_id"]:
-            return _set(room, {"is_active": False, "ended_at": _now(), "quiz_state": "closed"})
+            return _set(room, {"is_active": False, "ended_at": utcnow(), "quiz_state": "closed"})
         remaining = [p for p in room["participants"] if p["id"] != participant_id]
         return _set(room, {"participants": remaining})
 
@@ -215,7 +211,7 @@ def start_quiz(room: dict, questions: list[dict]) -> dict:
         if len(room["participants"]) < 2:
             raise ApiError("At least two participants are needed to start", 400)
         participants = [{**p, "score": 0, "answers": []} for p in room["participants"]]
-        now = _now()
+        now = utcnow()
         return _set(
             room,
             {
@@ -246,10 +242,9 @@ def record_answer(room: dict, participant: dict, question_index: int, selected: 
 
         question = room["questions"][question_index]
         started = room.get("question_started_at")
-        if started and started.tzinfo is None:
-            started = started.replace(tzinfo=timezone.utc)
+        started = as_utc(started)
         limit = room["time_per_question"]
-        elapsed = (_now() - started).total_seconds() if started else float(limit)
+        elapsed = (utcnow() - started).total_seconds() if started else float(limit)
         elapsed = max(0.0, min(elapsed, limit + 3))  # small grace for network latency
         is_correct = selected == question["answer"]
         earned = 100 + int(50 * max(0.0, 1 - elapsed / limit)) if is_correct else 0
@@ -275,6 +270,6 @@ def advance(room: dict) -> tuple[str, dict]:
         next_index = room["current_question_index"] + 1
         if next_index >= len(room["questions"]):
             return "quiz_completed", _set(
-                room, {"quiz_state": "completed", "completed_at": _now(), "question_started_at": None}
+                room, {"quiz_state": "completed", "completed_at": utcnow(), "question_started_at": None}
             )
-        return "next_question", _set(room, {"current_question_index": next_index, "question_started_at": _now()})
+        return "next_question", _set(room, {"current_question_index": next_index, "question_started_at": utcnow()})

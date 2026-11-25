@@ -20,26 +20,34 @@ def _with_owner(projection: dict | None) -> dict | None:
     return projection
 
 
-def owned_project(project_id: str | None, projection: dict | None = None) -> dict:
-    if not project_id:
-        raise ApiError("project_id is required")
-    project = get_db()[Collections.PROJECTS].find_one(
-        {"_id": to_object_id(project_id, "project id"), "user_id": g.user_id}, _with_owner(projection)
+def owned(collection: str, item_id: str | None, label: str, projection: dict | None = None) -> dict:
+    """The user's own `label` (e.g. "project") with this id, else 400/404."""
+    if not item_id:
+        raise ApiError(f"{label}_id is required")
+    item = get_db()[collection].find_one(
+        {"_id": to_object_id(item_id, f"{label} id"), "user_id": g.user_id}, _with_owner(projection)
     )
-    if not project:
-        raise ApiError("Project not found", 404)
-    return project
+    if not item:
+        raise ApiError(f"{label.capitalize()} not found", 404)
+    return item
+
+
+def owned_project(project_id: str | None, projection: dict | None = None) -> dict:
+    return owned(Collections.PROJECTS, project_id, "project", projection)
+
+
+def owned_project_id(project_id: str | None) -> str:
+    """Check the project is the user's and return its id as a string."""
+    return str(owned_project(project_id, {"_id": 1})["_id"])
 
 
 def owned_document(document_id: str | None, projection: dict | None = None) -> dict:
-    if not document_id:
-        raise ApiError("document_id is required")
-    doc = get_db()[Collections.DOCUMENTS].find_one(
-        {"_id": to_object_id(document_id, "document id"), "user_id": g.user_id}, _with_owner(projection)
-    )
-    if not doc:
-        raise ApiError("Document not found", 404)
-    return doc
+    return owned(Collections.DOCUMENTS, document_id, "document", projection)
+
+
+def scope_ids(scope: dict) -> dict:
+    """Just the ids of a resolved scope (what generation and stored rows need)."""
+    return {"project_id": scope["project_id"], "document_id": scope["document_id"]}
 
 
 def resolve_scope(data: dict) -> dict:

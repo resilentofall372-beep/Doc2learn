@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.utils import secure_filename
 
-from ..access import owned_document, owned_project, resolve_scope, touch_project
+from ..access import owned_document, owned_project, owned_project_id, resolve_scope, scope_ids, touch_project
 from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import Collections, get_db
@@ -47,15 +47,11 @@ def summary(doc: dict, number: int | None = None) -> dict:
     )
 
 
-def _scope_args(scope: dict) -> dict:
-    return {"project_id": scope["project_id"], "document_id": scope["document_id"]}
-
 
 @bp.post("/upload")
 @require_auth
 def upload():
-    project = owned_project(request.form.get("project_id"), {"_id": 1})
-    project_id = str(project["_id"])
+    project_id = owned_project_id(request.form.get("project_id"))
     if "file" not in request.files:
         raise ApiError("No file provided")
     upload_file = request.files["file"]
@@ -194,14 +190,14 @@ def generate_quiz():
     topic, topics, focus = _topic_args(scope, data)
 
     questions = generation.generate_quiz(
-        _scope_args(scope), num_questions, difficulty, focus, topics=topics, topic_id=topic["id"] if topic else None
+        scope_ids(scope), num_questions, difficulty, focus, topics=topics, topic_id=topic["id"] if topic else None
     )
     if not questions:
         raise ApiError("The model did not produce usable questions. Try again or lower the count.", 502)
 
     db = get_db()
     quiz = {
-        **_scope_args(scope),
+        **scope_ids(scope),
         "user_id": g.user_id,
         "questions": questions,
         "num_questions": len(questions),
@@ -219,7 +215,7 @@ def generate_quiz():
         {
             "success": True,
             "quiz_id": str(result.inserted_id),
-            **_scope_args(scope),
+            **scope_ids(scope),
             "difficulty": difficulty,
             "topic_id": topic["id"] if topic else None,
             "questions": questions,
@@ -236,7 +232,7 @@ def generate_flashcards():
     topic, topics, focus = _topic_args(scope, data)
 
     cards = generation.generate_flashcards(
-        _scope_args(scope), num_cards, focus, topics=topics, topic_id=topic["id"] if topic else None
+        scope_ids(scope), num_cards, focus, topics=topics, topic_id=topic["id"] if topic else None
     )
     if not cards:
         raise ApiError("The model did not produce usable flashcards. Try again.", 502)
@@ -244,7 +240,7 @@ def generate_flashcards():
     created_at = datetime.now(timezone.utc)
     get_db()[Collections.FLASHCARDS].insert_one(
         {
-            **_scope_args(scope),
+            **scope_ids(scope),
             "user_id": g.user_id,
             # A deck for one topic is kept separately from the deck for the whole scope.
             "topic_id": topic["id"] if topic else None,
@@ -269,12 +265,12 @@ def generate_mindmap():
 
     # A whole-project map follows the topic outline, so its branches line up with progress.
     topics = None if scope["document_id"] else topic_list(scope["project_id"], g.user_id) or None
-    mindmap = generation.generate_mindmap(_scope_args(scope), title, topics)
+    mindmap = generation.generate_mindmap(scope_ids(scope), title, topics)
     if not mindmap.get("branches"):
         raise ApiError("The model did not produce a usable concept map. Try again.", 502)
 
     get_db()[Collections.MINDMAPS].update_one(
-        {**_scope_args(scope), "user_id": g.user_id},
+        {**scope_ids(scope), "user_id": g.user_id},
         {
             "$set": {
                 "mindmap": mindmap,

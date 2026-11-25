@@ -5,27 +5,19 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
 
-from ..access import owned_project
+from ..access import owned, owned_project
 from ..auth import require_auth
-from ..errors import ApiError
 from ..extensions import Collections, get_db
-from ..utils import clamp, serialize, to_object_id
+from ..utils import clamp, serialize
 
 bp = Blueprint("quiz", __name__)
-
-
-def _owned_quiz(quiz_id: str) -> dict:
-    quiz = get_db()[Collections.QUIZZES].find_one({"_id": to_object_id(quiz_id, "quiz id"), "user_id": g.user_id})
-    if not quiz:
-        raise ApiError("Quiz not found", 404)
-    return quiz
 
 
 @bp.post("/submit")
 @require_auth
 def submit():
     data = request.get_json(silent=True) or {}
-    quiz = _owned_quiz(data.get("quiz_id"))
+    quiz = owned(Collections.QUIZZES, data.get("quiz_id"), "quiz")
     answers = data.get("answers") if isinstance(data.get("answers"), dict) else {}
     time_spent = clamp(data.get("time_spent_seconds"), 0, 24 * 3600, 0)
 
@@ -81,7 +73,7 @@ def submit():
 @bp.get("/<quiz_id>")
 @require_auth
 def get_quiz(quiz_id):
-    return jsonify({"success": True, "quiz": serialize(_owned_quiz(quiz_id))})
+    return jsonify({"success": True, "quiz": serialize(owned(Collections.QUIZZES, quiz_id, "quiz"))})
 
 
 @bp.get("/project/<project_id>")
