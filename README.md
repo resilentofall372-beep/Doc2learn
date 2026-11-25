@@ -203,7 +203,7 @@ backend/
 frontend/
   src/pages        one file per screen (Projects, Overview, Topics, Quiz, Flashcards, Review, MindMap, Chat, rooms, auth)
   src/components   projects/, document/, assistant/, quiz/, flashcards/, mindmap/, room/, dashboard/, ui/, common/
-  src/hooks        useTask (run a request, show an error notification if it fails)
+  src/hooks        useTask (run a request, show an error if it fails), useTopics (project outline)
   src/contexts     auth, notifications, theme, socket
   src/services     api.js (every API call), socket.js, storage.js
   vercel.json      SPA routing on Vercel
