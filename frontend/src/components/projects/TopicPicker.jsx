@@ -1,27 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { topicsAPI } from '../../services/api';
-
-/** The project's outline topics ([] until one is built). `titles` maps topic id -> title. */
-export const useTopics = (projectId) => {
-  const [topics, setTopics] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    topicsAPI
-      .get(projectId)
-      .then((res) => alive && setTopics(res.data.outline?.topics || []))
-      .catch(() => alive && setTopics([]))
-      .finally(() => alive && setLoaded(true));
-    return () => {
-      alive = false;
-    };
-  }, [projectId]);
-
-  const titles = useMemo(() => Object.fromEntries(topics.map((t) => [t.id, t.title])), [topics]);
-  return { topics, titles, loaded };
-};
 
 /** Choose one topic from the outline, or "All topics" (''). Shows a hint to build an outline when there is none. */
 const TopicPicker = ({ projectId, topics, value, onChange, label = 'Topic', id = 'topic' }) => {

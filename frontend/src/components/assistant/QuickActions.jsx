@@ -7,7 +7,7 @@ import Dialog from '../ui/Dialog';
 import RichText, { sourceLabel } from '../ui/RichText';
 import Segmented from '../ui/Segmented';
 import ScopePicker from '../projects/ScopePicker';
-import { useTopics } from '../projects/TopicPicker';
+import { useTopics } from '../../hooks/useTopics';
 import { timeAgo } from '../../utils/time';
 
 /**

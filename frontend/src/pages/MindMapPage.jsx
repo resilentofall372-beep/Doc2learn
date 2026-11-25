@@ -5,7 +5,8 @@ import { assistantAPI, errorMessage, mindmapAPI, projectAPI } from '../services/
 import { useTask } from '../hooks/useTask';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
-import MindMapCanvas, { normaliseMap } from '../components/mindmap/MindMapCanvas';
+import MindMapCanvas from '../components/mindmap/MindMapCanvas';
+import { normaliseMap } from '../components/mindmap/mapData';
 import StaleNotice from '../components/projects/StaleNotice';
 import EmptyState from '../components/ui/EmptyState';
 import RichText from '../components/ui/RichText';
