@@ -175,6 +175,46 @@ Notes:
 - If Render reports running out of memory, set `EMBEDDINGS_ENABLED=false`. Search then falls back to BM25 keyword retrieval.
 - Vercel preview deployments get different URLs. Add them to `CORS_ORIGINS` if you want them to work too.
 
+## Shipping changes
+
+Once set up, deploying is just `git push`. Both hosts watch the GitHub repo and rebuild from `main`:
+
+```
+your laptop ──git push──▶ GitHub (main)
+                              │
+              ┌───────────────┴────────────────┐
+              ▼                                ▼
+     Vercel (frontend/)                 Render (backend/Dockerfile)
+     npm run build, ~1 min              Docker build, ~3–5 min
+```
+
+- **Vercel** rebuilds the React app on every push to `main`. Pushes to other branches get a separate preview URL and leave the live site alone.
+- **Render** rebuilds the API on every push to `main`. The new version replaces the old one only after `/api/health` passes, so there is no downtime.
+- **MongoDB Atlas** is not redeployed. Users, projects and documents stay as they are.
+
+**Routine for a feature**
+1. Build and try it locally (`python run.py` + `npm run dev`, see *Run it locally*).
+2. Check it: `cd backend && python -m pytest`, then `cd frontend && npm run lint && npm run build`.
+3. `git add …`, `git commit -m "…"`, `git push origin main`.
+4. Wait for **Ready** in Vercel → Deployments and **Live** in Render → doc2learn-api → Events, then refresh the site.
+
+**What a push does and doesn't deploy**
+
+| You change… | Push is enough? | Otherwise |
+| --- | --- | --- |
+| Frontend code (`frontend/src`) | Yes, Vercel rebuilds | |
+| Backend code (`backend/app`, `requirements.txt`) | Yes, Render rebuilds | |
+| A Render env var (`CORS_ORIGINS`, `LLM_API_KEY`, …) | No, it isn't in git | Render → Environment → *Save, rebuild and deploy* |
+| A Vercel env var (`VITE_API_BASE_URL`, `VITE_SOCKET_URL`) | No, and it's baked in at build time | Vercel → Settings → Environment Variables, then *Redeploy* |
+| Your local `.env` | Never deployed (git-ignored) | Copy new settings to Render by hand |
+
+Good to know:
+- If a feature adds a new setting to `backend/app/config.py`, add it in Render too, or the live API uses the default.
+- Render rebuilds even for frontend-only pushes. That's harmless, just a few minutes of building.
+- A failed build doesn't take the site down: the previous version keeps running. Read the build log in that dashboard.
+- To roll back, use *Promote to Production* on an older Vercel deployment and *Rollback* on an older Render deploy, or `git revert` the commit and push.
+- `main` goes live on every push, so build bigger features on a branch (`git checkout -b my-feature`) and merge when ready.
+
 ## Tests
 
 ```bash
