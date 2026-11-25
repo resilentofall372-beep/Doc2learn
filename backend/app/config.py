@@ -18,12 +18,17 @@ class Config:
 
     MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/doc2learn")
 
-    CORS_ORIGINS = _csv(
-        os.environ.get(
-            "CORS_ORIGINS",
-            "http://localhost:5173,http://localhost:3000,http://localhost:8080",
+    # Browsers send Origin without a trailing slash or quotes, so drop any that
+    # were pasted into the env var by mistake; otherwise nothing would match.
+    CORS_ORIGINS = [
+        origin.strip("'\"").rstrip("/")
+        for origin in _csv(
+            os.environ.get(
+                "CORS_ORIGINS",
+                "http://localhost:5173,http://localhost:3000,http://localhost:8080",
+            )
         )
-    )
+    ]
 
     # Address other devices use to reach the app (for quiz invite links). Optional.
     PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
