@@ -12,5 +12,5 @@ pymupdf>=1.25,<2
 python-docx>=1.1,<2
 python-pptx>=1.0,<2
 pillow>=10.4,<12
-pytesseract>=0.3.13,<0.4
+indra-ocr>=1.2,<2
 fastembed>=0.4,<1

@@ -1,12 +1,13 @@
 """Text extraction for uploaded study material.
 
 Returns the text plus a list of page offsets so later stages can cite pages.
-Supported: PDF, DOCX, PPTX, TXT/MD, and images (via Tesseract when installed).
+Supported: PDF, DOCX, PPTX, TXT/MD, and images (OCR via Indra, a small CPU model).
 """
 from __future__ import annotations
 
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
@@ -48,15 +49,33 @@ def _join_pages(page_texts: list[str]) -> Extracted:
     return Extracted(text="\n\n".join(chunks), pages=pages)
 
 
+_ocr_converter = None
+_ocr_lock = threading.Lock()
+
+
+def _get_ocr_converter():
+    """Load the Indra OCR models once and reuse them (weights download on first use)."""
+    global _ocr_converter
+    if _ocr_converter is None:
+        try:
+            import indra_ocr
+        except ImportError:
+            raise ExtractionError("Image OCR needs the indra-ocr package installed.")
+        try:
+            _ocr_converter = indra_ocr.load(threads=2)
+        except Exception as exc:  # noqa: BLE001
+            raise ExtractionError(f"Indra OCR models could not be loaded: {exc.__class__.__name__}")
+    return _ocr_converter
+
+
 def _ocr_image(image) -> str:
-    try:
-        import pytesseract
-    except ImportError:
-        raise ExtractionError("Image OCR needs pytesseract and the tesseract binary installed.")
-    try:
-        return pytesseract.image_to_string(image)
-    except pytesseract.TesseractNotFoundError:
-        raise ExtractionError("Tesseract OCR binary is not installed on the server.")
+    import numpy as np
+
+    gray = np.asarray(image.convert("L"), dtype=np.uint8)
+    with _ocr_lock:
+        converter = _get_ocr_converter()
+        page = converter.ocr(gray)
+    return page.text or ""
 
 
 def extract_pdf(path: str) -> Extracted:

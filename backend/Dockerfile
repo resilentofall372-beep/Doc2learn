@@ -4,9 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     FASTEMBED_CACHE_PATH=/models
 
-# tesseract gives OCR for images and scanned PDFs
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr curl \
+    && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv
@@ -19,6 +18,10 @@ ARG PREFETCH_EMBEDDINGS=true
 RUN if [ "$PREFETCH_EMBEDDINGS" = "true" ]; then \
       python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"; \
     fi
+
+# Pre-download the Indra OCR weights (images and scanned PDF pages) so the
+# first scanned upload doesn't wait on a download.
+RUN python -c "import indra_ocr; indra_ocr.load(threads=1)"
 
 COPY . .
 

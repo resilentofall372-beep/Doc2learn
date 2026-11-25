@@ -44,7 +44,7 @@ React (Vite, Tailwind)  ──/api──▶  Flask API  ──▶  MongoDB
                                        └──▶  fastembed (local ONNX embeddings, BM25 fallback)
 ```
 
-- **Extraction:** PyMuPDF for PDF (with Tesseract OCR for scanned pages), python-docx, python-pptx, and OCR for images. Page boundaries are kept so chunks can cite pages.
+- **Extraction:** PyMuPDF for PDF (with [Indra](https://github.com/datalab-to/indra) OCR, a small CPU model, for scanned pages), python-docx, python-pptx, and Indra OCR for images. Page boundaries are kept so chunks can cite pages.
 - **Retrieval:** sentence-aware overlapping chunks stored in MongoDB with `BAAI/bge-small-en-v1.5` embeddings, searched across a whole project or one document. Excerpts are labelled `[Doc 2, Page 3]`; the API returns a legend so the interface shows the real file name.
 - **Generation:** every prompt lives in `backend/app/services/generation.py`, and every model call goes through `backend/app/services/llm.py`. Model output is parsed as JSON and validated before it reaches the browser.
 - **Live rooms:** room state is persisted in MongoDB. Each participant gets a private token that every socket event must present.
@@ -104,7 +104,7 @@ A visual tool such as **MongoDB Compass** or the VS Code MongoDB extension works
 
 ## Run it locally
 
-You need Python 3.11+, Node 20+, a MongoDB (a local install, or a free Atlas cluster as in *Deploy online* below) and a model API key. The free [Google Gemini](https://aistudio.google.com/apikey) tier works well. For OCR of scanned PDFs and images, also install Tesseract (`sudo apt install tesseract-ocr`).
+You need Python 3.11+, Node 20+, a MongoDB (a local install, or a free Atlas cluster as in *Deploy online* below) and a model API key. The free [Google Gemini](https://aistudio.google.com/apikey) tier works well. OCR of scanned PDFs and images uses Indra (installed by `pip`; its weights download on first use, and the model license is free for personal use and small startups).
 
 ```bash
 # Backend
@@ -137,7 +137,7 @@ Restart the backend. The lobby's invite link now uses `PUBLIC_URL`. If your rout
 
 ## Deploy online (Vercel + Render + MongoDB Atlas)
 
-The React frontend is a static site and runs on **Vercel**. The Flask API can't run on Vercel's serverless functions: live rooms need a long-lived WebSocket, and the server also uses Tesseract OCR, a local embedding model and model calls of up to three minutes. So the API runs as a Docker service on **Render** (free tier supports WebSockets), and the data lives in **MongoDB Atlas** (free M0 cluster).
+The React frontend is a static site and runs on **Vercel**. The Flask API can't run on Vercel's serverless functions: live rooms need a long-lived WebSocket, and the server also runs a local OCR model, a local embedding model and model calls of up to three minutes. So the API runs as a Docker service on **Render** (free tier supports WebSockets), and the data lives in **MongoDB Atlas** (free M0 cluster).
 
 ```
 Browser ─▶ Vercel (React build)
