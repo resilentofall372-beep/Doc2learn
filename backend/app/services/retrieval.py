@@ -86,7 +86,9 @@ def _load_embedder():
             from fastembed import TextEmbedding
 
             name = current_app.config["EMBEDDING_MODEL"]
-            _embedder["model"] = TextEmbedding(model_name=name)
+            # One ONNX thread keeps memory low enough for a 512 MB host; extra
+            # threads each get their own buffers and can get the process killed.
+            _embedder["model"] = TextEmbedding(model_name=name, threads=1)
             _embedder["name"] = name
             log.info("Loaded embedding model %s", name)
         except Exception as exc:  # noqa: BLE001
@@ -100,7 +102,7 @@ def embed(texts: list[str]) -> list[list[float]] | None:
     model = _load_embedder()
     if model is None or not texts:
         return None
-    return [vector.tolist() for vector in model.embed(texts, batch_size=32)]
+    return [vector.tolist() for vector in model.embed(texts, batch_size=8)]
 
 
 # --------------------------------------------------------------------------- indexing
