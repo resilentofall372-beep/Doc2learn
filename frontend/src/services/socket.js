@@ -1,5 +1,5 @@
 // Socket.IO connection factory. The server address defaults to the page origin,
-// which is proxied to the backend both by Vite (dev) and nginx (Docker).
+// which Vite proxies to the backend in development; the hosted build sets VITE_SOCKET_URL.
 import { io } from 'socket.io-client';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin;

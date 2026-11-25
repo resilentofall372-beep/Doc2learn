@@ -1,6 +1,6 @@
 // Single HTTP client for the Doc2Learn API.
-// In development Vite proxies /api to the backend; in Docker nginx does the same,
-// so the default base URL is relative and works in both.
+// In development Vite proxies /api to the backend, so the default base URL is
+// relative; the hosted build sets VITE_API_BASE_URL to the Render API.
 import axios from 'axios';
 import { storage } from './storage';
 import { STORAGE_KEYS } from '../utils/constants';

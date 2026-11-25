@@ -85,11 +85,10 @@ Deleting a project deletes everything inside it. Documents uploaded before proje
 
 ### Looking at the data
 
-With the app running (`docker compose up`):
+Open a shell on the database with the same address as `MONGO_URI`:
 
 ```bash
-# Terminal
-docker compose exec mongo mongosh doc2learn
+mongosh "mongodb://localhost:27017/doc2learn"     # or your Atlas mongodb+srv://… string
 ```
 
 ```js
@@ -99,42 +98,14 @@ db.documents.find({}, {filename: 1, project_id: 1}).limit(10)
 db.users.find({}, {password_hash: 0})        // hide password hashes
 ```
 
-For a visual tool such as **MongoDB Compass** or the VS Code MongoDB extension, connect to:
+A visual tool such as **MongoDB Compass** or the VS Code MongoDB extension works with the same address.
 
-```
-mongodb://localhost:27017/doc2learn
-```
+## Run it locally
 
-The port is published to this computer only (`127.0.0.1`), never to your Wi-Fi, because the database has no password.
-
-## Run it
-
-You need Docker and a model API key. The free [Google Gemini](https://aistudio.google.com/apikey) tier works well.
+You need Python 3.11+, Node 20+, a MongoDB (a local install, or a free Atlas cluster as in *Deploy online* below) and a model API key. The free [Google Gemini](https://aistudio.google.com/apikey) tier works well. For OCR of scanned PDFs and images, also install Tesseract (`sudo apt install tesseract-ocr`).
 
 ```bash
-cp .env.example .env          # then put your key in LLM_API_KEY
-docker compose up --build
-```
-
-Open http://localhost:8080. MongoDB runs in a container, so nothing else needs installing.
-
-`LLM_MODEL` picks the model and `LLM_FALLBACK_MODELS` lists models to try when it is busy. `.env.example` shows Gemini, Groq and OpenRouter set-ups.
-
-### Live quizzes with phones and laptops on your Wi-Fi
-
-Other devices reach the app through your computer's network address. Find it with `hostname -I` (the first address, e.g. `192.168.1.9`), then add it to `.env`:
-
-```bash
-CORS_ORIGINS=http://localhost:8080,http://localhost:5173,http://192.168.1.9:8080
-PUBLIC_URL=http://192.168.1.9:8080
-```
-
-Restart with `docker compose up --build`. The lobby's invite link now uses `PUBLIC_URL`. If your router gives your computer a new address later, update both lines.
-
-### Without Docker (development)
-
-```bash
-# Backend: needs Python 3.11+ and a MongoDB (local, Docker, or Atlas)
+# Backend
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
@@ -146,6 +117,21 @@ cd frontend
 npm install
 npm run dev                   # http://localhost:5173, proxies /api to the backend
 ```
+
+Open http://localhost:5173.
+
+`LLM_MODEL` picks the model and `LLM_FALLBACK_MODELS` lists models to try when it is busy. `.env.example` shows Gemini, Groq and OpenRouter set-ups.
+
+### Live quizzes with phones and laptops on your Wi-Fi
+
+The Vite dev server already listens on your network. Find your computer's address with `hostname -I` (the first address, e.g. `192.168.1.9`), then add it to `backend/.env`:
+
+```bash
+CORS_ORIGINS=http://localhost:5173,http://192.168.1.9:5173
+PUBLIC_URL=http://192.168.1.9:5173
+```
+
+Restart the backend. The lobby's invite link now uses `PUBLIC_URL`. If your router gives your computer a new address later, update both lines.
 
 ## Deploy online (Vercel + Render + MongoDB Atlas)
 
@@ -208,7 +194,7 @@ frontend/
   src/pages        Home, Login, Signup, Projects, ProjectDocuments, Topics, Chat, Quiz, Flashcards, MindMap, rooms
   src/components   projects/, document/, assistant/, quiz/, flashcards/, mindmap/, room/, ui/, common/
   src/services/api.js
-docker-compose.yml
+render.yaml          Render service for the API
 ```
 
 ## Roadmap

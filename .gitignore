@@ -26,3 +26,6 @@ npm-debug.log*
 uploads/
 models/
 .claude/
+
+# Personal Obsidian notes vault (not part of the app)
+Doc2learn/
