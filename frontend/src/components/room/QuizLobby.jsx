@@ -91,7 +91,7 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
             <div className="space-y-4 p-5">
               {error && <div className="alert alert-danger">{error}</div>}
               {questions.length === 0 ? (
-                <button type="button" onClick={generate} disabled={generating || !room.document_id} className="btn btn-secondary w-full">
+                <button type="button" onClick={generate} disabled={generating || !room.project_id} className="btn btn-secondary w-full">
                   {generating ? <LoadingSpinner size="small" /> : <Sparkles className="h-4 w-4" />}
                   {generating ? 'Writing questions…' : 'Generate questions'}
                 </button>
