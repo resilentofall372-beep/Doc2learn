@@ -4,6 +4,7 @@ import { useSocket } from '../contexts/SocketContext';
 import { errorMessage, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
 import { useApp } from '../contexts/AppContext';
+import { useAuth } from '../contexts/AuthContext';
 import { LogOut } from 'lucide-react';
 import { PageLoader } from '../components/common/LoadingSpinner';
 import QuizLobby from '../components/room/QuizLobby';
@@ -15,6 +16,9 @@ const RoomPage = () => {
   const navigate = useNavigate();
   const { addNotification } = useApp();
   const { socket, isConnected } = useSocket();
+  const { isAuthenticated } = useAuth();
+  // Guests have no account, so they go back to the code page, never to a sign-in wall.
+  const exitTo = isAuthenticated ? '/study-rooms' : '/join';
 
   const identity = roomIdentity.load(roomId);
   const [room, setRoom] = useState(null);
@@ -27,7 +31,7 @@ const RoomPage = () => {
   const [review, setReview] = useState([]);
   const joinedRef = useRef(false);
 
-  const isHost = Boolean(identity?.is_host) || (room && identity && room.host_id === identity.participant_id);
+  const isHost = Boolean(identity?.is_host) || Boolean(room && identity && room.host_id === identity.participant_id);
 
   const credentials = useCallback(
     () => ({ room_id: roomId, participant_id: identity?.participant_id, participant_token: identity?.participant_token }),
@@ -40,7 +44,7 @@ const RoomPage = () => {
       roomAPI
         .getRoom(roomId)
         .then((res) => navigate(`/join/${res.data.room.room_code}`, { replace: true }))
-        .catch(() => navigate('/study-rooms', { replace: true }));
+        .catch(() => navigate(exitTo, { replace: true }));
       return;
     }
     roomAPI
@@ -62,7 +66,7 @@ const RoomPage = () => {
       })
       .catch((error) => {
         addNotification({ type: 'error', title: 'Room unavailable', message: errorMessage(error) });
-        navigate('/study-rooms');
+        navigate(exitTo);
       })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -84,7 +88,17 @@ const RoomPage = () => {
     const onRoomClosed = () => {
       addNotification({ type: 'info', title: 'Room closed', message: 'The host ended this room.' });
       roomIdentity.clear(roomId);
-      navigate('/study-rooms');
+      navigate(exitTo);
+    };
+    const onRemoved = ({ participant_id: removedId, participants: list, message }) => {
+      if (removedId === identity.participant_id) {
+        addNotification({ type: 'info', title: 'Removed from the quiz', message: 'The host removed you from this room.' });
+        roomIdentity.clear(roomId);
+        navigate(exitTo);
+        return;
+      }
+      setParticipants(list || []);
+      if (message) addNotification({ type: 'info', title: 'Player removed', message });
     };
     const onQuestion = (payload) => {
       setQuizState('in_progress');
@@ -105,6 +119,7 @@ const RoomPage = () => {
     socket.on('participant_joined', onParticipants);
     socket.on('participant_left', onParticipantLeft);
     socket.on('room_closed', onRoomClosed);
+    socket.on('participant_removed', onRemoved);
     socket.on('quiz_started', onQuestion);
     socket.on('next_question', onQuestion);
     socket.on('answer_result', onAnswerResult);
@@ -122,6 +137,7 @@ const RoomPage = () => {
       socket.off('participant_joined', onParticipants);
       socket.off('participant_left', onParticipantLeft);
       socket.off('room_closed', onRoomClosed);
+      socket.off('participant_removed', onRemoved);
       socket.off('quiz_started', onQuestion);
       socket.off('next_question', onQuestion);
       socket.off('answer_result', onAnswerResult);
@@ -133,7 +149,9 @@ const RoomPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, room?.room_id]);
 
-  const startQuiz = (questions) => socket?.emit('start_quiz', { ...credentials(), questions });
+  // Questions are stored on the server; the host only says "go".
+  const startQuiz = () => socket?.emit('start_quiz', credentials());
+  const removePlayer = (targetId) => socket?.emit('kick_player', { ...credentials(), target_id: targetId });
   const submitAnswer = ({ selected_answer }) => {
     if (hasAnswered || !question) return;
     setHasAnswered(true);
@@ -147,7 +165,7 @@ const RoomPage = () => {
       /* leaving is best-effort */
     }
     roomIdentity.clear(roomId);
-    navigate('/study-rooms');
+    navigate(exitTo);
   };
 
   if (loading || !room) return <PageLoader label="Loading quiz…" />;
@@ -183,7 +201,14 @@ const RoomPage = () => {
       </div>
 
       {quizState === 'lobby' && (
-        <QuizLobby room={{ ...room, participants }} isHost={isHost} onStartQuiz={startQuiz} />
+        <QuizLobby
+          room={{ ...room, participants }}
+          isHost={isHost}
+          credentials={credentials}
+          onStartQuiz={startQuiz}
+          onRemovePlayer={removePlayer}
+          onRoomChange={(fresh) => setRoom((prev) => ({ ...prev, ...fresh }))}
+        />
       )}
 
       {quizState === 'in_progress' && question && (

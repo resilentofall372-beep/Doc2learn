@@ -1,17 +1,32 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Crown, Play, RefreshCw, Sparkles } from 'lucide-react';
-import { documentAPI, errorMessage, healthAPI } from '../../services/api';
+import { Check, Copy, Crown, Link2, Play, RefreshCw, Sparkles, X } from 'lucide-react';
+import { errorMessage, healthAPI, roomAPI } from '../../services/api';
 import Avatar from '../ui/Avatar';
 import LoadingSpinner from '../common/LoadingSpinner';
 
-const QuizLobby = ({ room, isHost, onStartQuiz }) => {
+/** "1 h 40 m" until the invite expires, or null once it has (or for older rooms without an expiry). */
+const timeLeft = (iso, now) => {
+  if (!iso) return null;
+  const minutes = Math.ceil((new Date(iso).getTime() - now) / 60000);
+  if (minutes <= 0) return null;
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} m` : `${minutes} m`;
+};
+
+const QuizLobby = ({ room, isHost, credentials, onStartQuiz, onRemovePlayer, onRoomChange }) => {
   const [generating, setGenerating] = useState(false);
-  const [questions, setQuestions] = useState([]);
+  const [questionCount, setQuestionCount] = useState(room.question_count || 0);
+  const [renewing, setRenewing] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
   // Prefer the configured network address so invite links work on other devices,
   // even when the host opened the app at localhost.
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
+
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     healthAPI
@@ -28,17 +43,27 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
     setError(null);
     setGenerating(true);
     try {
-      const res = await documentAPI.generateQuiz({
-        projectId: room.project_id,
-        documentId: room.document_id,
-        num_questions: room.num_questions,
-        difficulty: room.difficulty,
-      });
-      setQuestions(res.data.questions || []);
+      // Questions (and answers) stay on the server; the host only learns how many are ready.
+      const res = await roomAPI.generateQuestions(room.room_id, credentials());
+      setQuestionCount(res.data.question_count || 0);
     } catch (err) {
       setError(errorMessage(err, 'Could not generate questions'));
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // A fresh code: the old link stops working, people already here stay.
+  const renewLink = async () => {
+    setError(null);
+    setRenewing(true);
+    try {
+      onRoomChange((await roomAPI.newCode(room.room_id, credentials())).data.room);
+      setNow(Date.now());
+    } catch (err) {
+      setError(errorMessage(err, 'Could not make a new link'));
+    } finally {
+      setRenewing(false);
     }
   };
 
@@ -53,7 +78,9 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
   };
 
   const players = room.participants || [];
-  const enoughPlayers = players.length >= 2;
+  const enoughPlayers = players.length >= 1;
+  const expiresIn = timeLeft(room.invite_expires_at, now);
+  const expired = Boolean(room.invite_expires_at) && !expiresIn;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -70,10 +97,23 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
               CORS_ORIGINS in .env (see the README).
             </p>
           )}
-          <button type="button" onClick={copyLink} className="btn btn-secondary btn-sm mt-5">
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? 'Link copied' : 'Copy invite link'}
-          </button>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <button type="button" onClick={copyLink} disabled={expired} className="btn btn-secondary btn-sm">
+              {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Link copied' : 'Copy invite link'}
+            </button>
+            {isHost && (
+              <button type="button" onClick={renewLink} disabled={renewing} className="btn btn-ghost btn-sm">
+                <Link2 className="h-3.5 w-3.5" />
+                New link
+              </button>
+            )}
+          </div>
+          {isHost && (expiresIn || expired) && (
+            <p className={`mt-2 text-xs ${expiresIn ? 'muted' : 'text-amber-700 dark:text-amber-400'}`}>
+              {expiresIn ? `Link expires in ${expiresIn}. Players already here stay in.` : 'This link has expired. Make a new one to let more people in.'}
+            </p>
+          )}
           <div className="muted mt-8 flex flex-wrap justify-center gap-x-5 gap-y-1 text-sm">
             <span>{room.num_questions} questions</span>
             <span>{room.time_per_question}s per question</span>
@@ -90,7 +130,7 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
             </div>
             <div className="space-y-4 p-5">
               {error && <div className="alert alert-danger">{error}</div>}
-              {questions.length === 0 ? (
+              {questionCount === 0 ? (
                 <button type="button" onClick={generate} disabled={generating || !room.project_id} className="btn btn-secondary w-full">
                   {generating ? <LoadingSpinner size="small" /> : <Sparkles className="h-4 w-4" />}
                   {generating ? 'Writing questions…' : 'Generate questions'}
@@ -99,7 +139,7 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
                 <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
                   <span className="inline-flex items-center gap-2 font-medium">
                     <Check className="h-4 w-4" />
-                    {questions.length} questions ready
+                    {questionCount} questions ready
                   </span>
                   <button type="button" onClick={generate} disabled={generating} className="btn btn-ghost btn-sm">
                     <RefreshCw className="h-3.5 w-3.5" />
@@ -107,11 +147,11 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
                   </button>
                 </div>
               )}
-              <button type="button" onClick={() => onStartQuiz(questions)} disabled={!questions.length || !enoughPlayers} className="btn btn-primary btn-lg w-full">
+              <button type="button" onClick={onStartQuiz} disabled={!questionCount || !enoughPlayers} className="btn btn-primary btn-lg w-full">
                 <Play className="h-4 w-4" />
                 Start quiz
               </button>
-              {!enoughPlayers && <p className="muted text-center text-xs">Waiting for at least one player to join.</p>}
+              {!enoughPlayers && <p className="muted text-center text-xs">Waiting for the first player to join.</p>}
             </div>
           </section>
         ) : (
@@ -132,16 +172,29 @@ const QuizLobby = ({ room, isHost, onStartQuiz }) => {
             {players.length}/{room.max_participants}
           </span>
         </div>
+        <div className="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+          <Avatar name={room.host_name} size="sm" />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{room.host_name}</span>
+          <span className="badge badge-warning">
+            <Crown className="h-3 w-3" />
+            Runs the quiz
+          </span>
+        </div>
+        {players.length === 0 && <p className="muted px-5 py-6 text-center text-sm">No players yet. Share the code or link.</p>}
         <ul className="max-h-[28rem] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
           {players.map((p) => (
             <li key={p.id} className="flex items-center gap-3 px-5 py-3">
               <Avatar name={p.name} avatar={p.avatar} size="sm" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
-              {p.is_host && (
-                <span className="badge badge-warning">
-                  <Crown className="h-3 w-3" />
-                  Host
-                </span>
+              {isHost && (
+                <button
+                  type="button"
+                  onClick={() => window.confirm(`Remove ${p.name} from the quiz?`) && onRemovePlayer(p.id)}
+                  aria-label={`Remove ${p.name}`}
+                  className="btn btn-ghost btn-sm text-zinc-400 hover:text-red-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
             </li>
           ))}

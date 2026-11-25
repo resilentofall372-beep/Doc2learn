@@ -45,7 +45,7 @@ const LiveQuiz = ({
   }, [currentQuestionIndex, limit, startedAt]);
 
   const choose = (key) => {
-    if (hasAnswered || timeLeft === 0) return;
+    if (isHost || hasAnswered || timeLeft === 0) return; // the host runs the quiz, players answer
     setSelected(key);
     onSubmitAnswer({ selected_answer: key });
   };
@@ -53,7 +53,7 @@ const LiveQuiz = ({
   const answeredCount = participants?.filter((p) => p.answers?.some((a) => a.question_index === currentQuestionIndex)).length || 0;
   const pct = (timeLeft / limit) * 100;
   const barColor = pct > 50 ? 'bg-primary-600 dark:bg-primary-500' : pct > 20 ? 'bg-amber-500' : 'bg-red-500';
-  const locked = hasAnswered || timeLeft === 0;
+  const locked = isHost || hasAnswered || timeLeft === 0;
   const ranked = (participants || []).slice().sort((a, b) => (b.score || 0) - (a.score || 0));
 
   return (
@@ -84,7 +84,7 @@ const LiveQuiz = ({
                   onClick={() => choose(key)}
                   disabled={locked}
                   className={`choice flex items-start gap-3 px-4 py-4 text-left font-normal disabled:cursor-default ${active ? 'choice-active' : ''} ${
-                    locked && !active ? 'opacity-50' : ''
+                    locked && !active && !isHost ? 'opacity-50' : ''
                   }`}
                 >
                   <span
@@ -101,7 +101,9 @@ const LiveQuiz = ({
           </div>
 
           <div className="mt-6 min-h-[3rem]">
-            {lastResult ? (
+            {isHost ? (
+              <div className="alert alert-info">You&apos;re running this quiz. Players answer on their own screens.</div>
+            ) : lastResult ? (
               <div className={`alert ${lastResult.is_correct ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200' : 'alert-danger'}`}>
                 {lastResult.is_correct ? <Check className="mt-0.5 h-4 w-4" /> : <X className="mt-0.5 h-4 w-4" />}
                 <span>

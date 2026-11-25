@@ -6,13 +6,22 @@ from flask import Blueprint, g, jsonify, request
 from ..access import owned_document, resolve_scope
 from ..auth import optional_auth, require_auth
 from ..errors import ApiError
-from ..services import rooms
+from ..services import generation, rooms
 from ..utils import clamp, clean_str
 
 bp = Blueprint("rooms", __name__)
 
 DIFFICULTIES = {"easy", "medium", "hard"}
 DEFAULT_AVATAR = "🙂"
+
+
+def _host_room(room_id: str) -> dict:
+    """The room, if the request carries the host's credentials."""
+    data = request.get_json(silent=True) or {}
+    room = rooms.require_room(clean_str(room_id, 20))
+    if not rooms.authenticate(room, data.get("participant_id", ""), data.get("participant_token", "")).get("is_host"):
+        raise ApiError("Only the host can do that", 403)
+    return room
 
 
 @bp.post("/create")
@@ -39,7 +48,7 @@ def create():
         num_questions=clamp(data.get("num_questions"), 3, 25, 10),
         time_per_question=clamp(data.get("time_per_question"), 10, 120, 30),
         difficulty=difficulty,
-        max_participants=clamp(data.get("max_participants"), 2, 100, 20),
+        max_participants=clamp(data.get("max_participants"), 1, 100, 20),
     )
     return (
         jsonify(
@@ -64,7 +73,7 @@ def join():
     code = clean_str(data.get("room_code") or data.get("room_id"), 20)
     if not code:
         raise ApiError("room_code is required")
-    room = rooms.require_room(code)
+    room = rooms.require_invite(code)
 
     fallback = g.user["name"] if g.user else ""
     name = clean_str(data.get("participant_name") or data.get("user_name"), 30) or fallback
@@ -92,13 +101,33 @@ def join():
 
 
 @bp.get("/rooms")
-def open_rooms():
-    return jsonify({"success": True, "rooms": rooms.list_open_rooms()})
+@require_auth
+def my_rooms():
+    """Your own open rooms. Other people's rooms are never listed: the code is the only way in."""
+    return jsonify({"success": True, "rooms": rooms.hosted_rooms(g.user_id)})
 
 
 @bp.get("/code/<room_code>")
 def by_code(room_code):
-    return jsonify({"success": True, "room": rooms.join_summary(rooms.require_room(room_code))})
+    return jsonify({"success": True, "room": rooms.join_summary(rooms.require_invite(room_code))})
+
+
+@bp.post("/<room_id>/questions")
+def generate_questions(room_id):
+    """Host only: write the room's questions. They stay on the server; the host gets the count."""
+    room = _host_room(room_id)
+    questions = generation.generate_quiz(
+        {"project_id": room["project_id"], "document_id": room.get("document_id")}, room["num_questions"], room["difficulty"]
+    )
+    room = rooms.set_questions(room, questions)
+    return jsonify({"success": True, "question_count": len(room["questions"])})
+
+
+@bp.post("/<room_id>/new-code")
+def new_code(room_id):
+    """Host only: replace the invite code (the old link stops working; nobody inside is affected)."""
+    room = rooms.new_invite(_host_room(room_id))
+    return jsonify({"success": True, "room": rooms.public_room(room)})
 
 
 @bp.get("/<room_id>")
@@ -117,12 +146,12 @@ def leave():
     room = rooms.remove_participant(room, participant["id"])
     from ..extensions import socketio
 
-    event = "room_closed" if participant["is_host"] else "participant_left"
+    event = "room_closed" if participant.get("is_host") else "participant_left"
     socketio.emit(
         event,
         {
             "participants": rooms.public_room(room)["participants"],
-            "message": f"{participant['name']} left the room" if not participant["is_host"] else "The host closed the room",
+            "message": f"{participant['name']} left the room" if not participant.get("is_host") else "The host closed the room",
         },
         to=room["room_id"],
     )
