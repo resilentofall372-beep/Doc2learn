@@ -11,7 +11,7 @@ import Flashcard from '../components/flashcards/Flashcard';
 import { RatingBar } from '../components/flashcards/FlashcardDeck';
 import EmptyState from '../components/ui/EmptyState';
 import { PageLoader } from '../components/common/LoadingSpinner';
-import { RATINGS, cardPayload } from '../utils/progress';
+import { RATINGS, cardPayload, dueLabel } from '../utils/progress';
 
 /** Go through the flashcards that are due now. A card rated "Again" comes back at the end of the session. */
 const Review = ({ projectId }) => {
@@ -27,6 +27,7 @@ const Review = ({ projectId }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [ratings, setRatings] = useState(0);
+  const [upcoming, setUpcoming] = useState({}); // {next_due_at, next_due_count, new_count}
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,6 +35,8 @@ const Review = ({ projectId }) => {
       const res = await flashcardsAPI.due(projectId, topicId || null);
       setQueue(res.data.cards || []);
       setTotal((res.data.cards || []).length);
+      const { next_due_at, next_due_count, new_count } = res.data;
+      setUpcoming({ next_due_at, next_due_count, new_count });
       setDone(0);
       setShowAnswer(false);
     } catch (error) {
@@ -105,6 +108,11 @@ const Review = ({ projectId }) => {
 
   if (!card) {
     const finished = total > 0;
+    const { next_due_at: nextDue, next_due_count: nextCount = 0, new_count: newCount = 0 } = upcoming;
+    const waiting = [
+      newCount ? `${newCount} new ${newCount === 1 ? 'card is' : 'cards are'} waiting in Flashcards.` : null,
+      nextDue ? `Next review: ${dueLabel(nextDue)}, ${nextCount} ${nextCount === 1 ? 'card' : 'cards'}.` : null,
+    ].filter(Boolean);
     return (
       <>
         {header}
@@ -115,13 +123,15 @@ const Review = ({ projectId }) => {
             description={
               finished
                 ? 'Each card is scheduled to come back just before you would forget it.'
-                : 'Cards show up here when they are due. Rate cards in Flashcards to start their schedule: the better you know one, the later it returns.'
+                : waiting.length
+                  ? waiting.join(' ')
+                  : 'Cards show up here when they are due. Rate cards in Flashcards to start their schedule: the better you know one, the later it returns.'
             }
             action={
               <div className="flex flex-wrap justify-center gap-2">
                 <Link to={`/projects/${projectId}`} className="btn btn-primary">Back to overview</Link>
                 <Link to={`/projects/${projectId}/flashcards${topicId ? `?topic=${topicId}` : ''}`} className="btn btn-secondary">
-                  {finished ? 'Study more cards' : 'Go to flashcards'}
+                  {finished ? 'Study more cards' : newCount ? `Study ${newCount} new ${newCount === 1 ? 'card' : 'cards'}` : 'Go to flashcards'}
                 </Link>
               </div>
             }

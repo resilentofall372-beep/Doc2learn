@@ -118,8 +118,11 @@ export const mindmapAPI = {
 
 export const assistantAPI = {
   chat: (projectId, question) => api.post('/assistant/chat', { project_id: projectId, question }),
-  explainConcept: (projectId, documentId, concept) =>
-    api.post('/assistant/explain', { ...scope(projectId, documentId), concept }),
+  /** With a topicId the explanation is saved to that topic and the topic counts as learned. */
+  explainConcept: (projectId, documentId, concept, topicId) =>
+    api.post('/assistant/explain', { ...scope(projectId, documentId), concept, topic_id: topicId || undefined }),
+  /** Saved topic explanations, newest first. */
+  explanations: (projectId) => api.get('/assistant/explanations', { params: { project_id: projectId } }),
   generatePractice: (projectId, documentId, topic, numProblems = 5) =>
     api.post('/assistant/practice', { ...scope(projectId, documentId), topic, num_problems: numProblems }),
   summarize: (projectId, documentId, summaryType = 'brief') =>
@@ -146,6 +149,8 @@ export const roomAPI = {
   /** Your own open rooms (rooms are never listed to anyone else). */
   getRooms: () => api.get('/room/rooms'),
   getRoom: (roomId) => api.get(`/room/${roomId}`),
+  /** The signed-in host's credentials for their own room (when this browser lost them). */
+  hostIdentity: (roomId) => api.get(`/room/${roomId}/host`),
   getRoomByCode: (roomCode) => api.get(`/room/code/${roomCode}`),
   leave: (data) => api.post('/room/leave', data),
   /** Host only: questions are generated and kept on the server. */

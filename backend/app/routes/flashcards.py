@@ -117,10 +117,19 @@ def review():
 @bp.get("/due")
 @require_auth
 def due():
-    """Cards due now in ?project_id=... (optionally &topic_id=...), most overdue first."""
-    query = {"user_id": g.user_id, "project_id": owned_project_id(request.args.get("project_id")), "due_at": {"$lte": _utcnow()}}
-    if request.args.get("topic_id"):
-        query["topic_id"] = request.args["topic_id"]
+    """Cards due now in ?project_id=... (optionally &topic_id=...), most overdue first.
+
+    Also says when the next card comes due (`next_due_at`, with how many fall on that day)
+    and how many cards were never rated (`new_count`), so an empty queue isn't "all caught up".
+    """
+    from ..services.progress import new_cards
+
+    project_id = owned_project_id(request.args.get("project_id"))
+    topic_id = request.args.get("topic_id") or None
+    now = _utcnow()
+    query = {"user_id": g.user_id, "project_id": project_id, "due_at": {"$lte": now}}
+    if topic_id:
+        query["topic_id"] = topic_id
     limit = clamp(request.args.get("limit"), 1, 200, 100)
     total = get_db()[Collections.CARD_REVIEWS].count_documents(query)
     rows = list(get_db()[Collections.CARD_REVIEWS].find(query).sort("due_at", 1).limit(limit))
@@ -138,4 +147,23 @@ def due():
         }
         for r in rows
     ]
-    return jsonify({"success": True, "cards": cards, "count": len(cards), "total": total})
+    upcoming = {**query, "due_at": {"$gt": now}}
+    first = get_db()[Collections.CARD_REVIEWS].find_one(upcoming, {"due_at": 1}, sort=[("due_at", 1)])
+    next_due_at, next_due_count = None, 0
+    if first:
+        next_due_at = first["due_at"]
+        day_end = datetime.combine(next_due_at.date(), datetime.max.time())
+        next_due_count = get_db()[Collections.CARD_REVIEWS].count_documents({**query, "due_at": {"$gt": now, "$lte": day_end}})
+    fresh = new_cards(g.user_id, project_id)
+    new_count = fresh.get(topic_id, 0) if topic_id else sum(fresh.values())
+    return jsonify(
+        {
+            "success": True,
+            "cards": cards,
+            "count": len(cards),
+            "total": total,
+            "next_due_at": serialize(next_due_at),
+            "next_due_count": next_due_count,
+            "new_count": new_count,
+        }
+    )

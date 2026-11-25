@@ -44,10 +44,20 @@ def test_next_step_order():
     assert next_step(document_count=1, has_outline=True, pending_documents=0, due=2, topics=topics)["kind"] == "review"
     weak = next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=topics)
     assert weak["kind"] == "strengthen" and weak["topic_id"] == "t2"
+    # A started topic is finished before the next one is started (outline order).
     topics[1] = topic(2, 70, "learning")
-    assert next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=topics)["topic_id"] == "t3"
-    topics[2] = topic(3, 75, "learning")
-    assert next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=topics)["kind"] == "test_topic"
+    step = next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=topics)
+    assert step["kind"] == "test_topic" and step["topic_id"] == "t2"
+    topics[1] = topic(2, 90, "mastered")
+    step = next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=topics)
+    assert step["kind"] == "start_topic" and step["topic_id"] == "t3"
+    # Reading the explanation ("Learn it") moves the topic on to testing.
+    topics[2] = {**topic(3, None, "not_started"), "learned": True}
+    step = next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=topics)
+    assert step["kind"] == "test_topic" and step["topic_id"] == "t3"
+    # Weak means a low accuracy, not just little evidence.
+    few = {**topic(3, 20, "learning"), "accuracy": 100}
+    assert next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=[topics[0], topics[1], few])["kind"] == "test_topic"
     done = [topic(1, 90, "mastered")]
     assert next_step(document_count=1, has_outline=True, pending_documents=0, due=0, topics=done)["kind"] == "all_mastered"
 
@@ -70,12 +80,14 @@ def test_reviews_mastery_plan_and_today(app, client, document):
     step = _overview(client, headers, project_id)["next_step"]
     assert step["kind"] == "start_topic" and step["topic_id"] == light["id"]
 
-    # Quiz on "Calvin cycle": answer 1 of 2 right -> 50% mastery, learning, and the weakest topic.
+    # Quiz on "Calvin cycle": answer 1 of 2 right -> 50% accuracy, but only 2 of 5 pieces of
+    # evidence, so 20% mastery; learning, and the weakest topic.
     quiz = client.post("/api/document/generate-quiz", json={"project_id": project_id, "topic_id": calvin["id"]}, headers=headers).get_json()
     client.post("/api/quiz/submit", json={"quiz_id": quiz["quiz_id"], "answers": {"0": "A", "1": "C"}}, headers=headers)
     ov = _overview(client, headers, project_id)
     row = {t["id"]: t for t in ov["topics"]}
-    assert row[calvin["id"]]["mastery"] == 50 and row[calvin["id"]]["status"] == "learning"
+    assert row[calvin["id"]]["accuracy"] == 50 and row[calvin["id"]]["mastery"] == 20
+    assert row[calvin["id"]]["status"] == "learning"
     assert row[light["id"]]["status"] == "not_started"
     assert ov["next_step"]["kind"] == "strengthen" and ov["next_step"]["topic_id"] == calvin["id"]
 
@@ -83,6 +95,8 @@ def test_reviews_mastery_plan_and_today(app, client, document):
     deck = client.post("/api/document/generate-flashcards", json={"project_id": project_id, "topic_id": calvin["id"]}, headers=headers).get_json()
     card = deck["flashcards"][0]
     assert card["id"]
+    # Unrated cards count as new, not as "all caught up".
+    assert _overview(client, headers, project_id)["new_cards"] == len(deck["flashcards"])
     bad = client.post("/api/flashcards/review", json={"project_id": project_id, "card": card, "rating": "meh"}, headers=headers)
     assert bad.status_code == 400
     rated = client.post("/api/flashcards/review", json={"project_id": project_id, "card": card, "rating": "good"}, headers=headers).get_json()
@@ -95,6 +109,7 @@ def test_reviews_mastery_plan_and_today(app, client, document):
     assert due["count"] == 1 and due["cards"][0]["front"] == card["front"] and due["cards"][0]["topic_id"] == calvin["id"]
     ov = _overview(client, headers, project_id)
     assert ov["due_cards"] == 1 and ov["next_step"]["kind"] == "review"
+    assert ov["new_cards"] == len(deck["flashcards"]) - 1
     assert {t["id"]: t for t in ov["topics"]}[calvin["id"]]["status"] == "review_due"
 
     # The deck view knows each card's schedule.

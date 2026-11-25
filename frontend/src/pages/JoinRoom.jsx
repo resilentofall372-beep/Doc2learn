@@ -29,14 +29,17 @@ const JoinRoom = () => {
     }
     try {
       const res = await roomAPI.getRoomByCode(roomCode);
-      setRoom(res.data.room);
-      if (roomIdentity.load(res.data.room.room_id)) navigate(`/room/${res.data.room.room_id}`, { replace: true });
+      const found = res.data.room;
+      setRoom(found);
+      // Already in this room, or hosting it: go straight there (the room page restores a host's credentials).
+      const hosting = Boolean(user && found.host_id === user.user_id);
+      if (hosting || roomIdentity.load(found.room_id)) navigate(`/room/${found.room_id}`, { replace: true });
     } catch (err) {
       setError(errorMessage(err, 'This code is invalid or the quiz has ended.'));
     } finally {
       setLoading(false);
     }
-  }, [roomCode, navigate]);
+  }, [roomCode, navigate, user]);
 
   useEffect(() => {
     load();
@@ -138,11 +141,7 @@ const JoinRoom = () => {
         </div>
 
         {ownRoom ? (
-          <div className="px-6 py-8 text-center">
-            <p className="text-sm font-semibold">You&apos;re hosting this quiz</p>
-            <p className="muted mt-1 text-sm">Hosts run the game from the room page; they don&apos;t join as a player.</p>
-            <Link to={`/room/${room.room_id}`} className="btn btn-primary mt-5">Open your room</Link>
-          </div>
+          <PageLoader label="Opening your room…" />
         ) : canJoin ? (
           <form onSubmit={join} className="space-y-5 px-6 py-6">
             {joinError && <div className="alert alert-danger">{joinError}</div>}

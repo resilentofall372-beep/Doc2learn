@@ -42,7 +42,6 @@ const Quiz = ({ projectId, documents }) => {
   const [difficulty, setDifficulty] = useState(() =>
     ['easy', 'medium', 'hard'].includes(params.get('difficulty')) ? params.get('difficulty') : 'medium'
   );
-  const [focus, setFocus] = useState('');
   const [quizId, setQuizId] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [current, setCurrent] = useState(0);
@@ -74,7 +73,6 @@ const Quiz = ({ projectId, documents }) => {
         topicId: topicId || null,
         num_questions: numQuestions,
         difficulty,
-        focus: topicId ? undefined : focus.trim() || undefined,
       });
       setQuizId(res.data.quiz_id);
       setQuestions(res.data.questions);
@@ -154,19 +152,6 @@ const Quiz = ({ projectId, documents }) => {
             options={QUIZ_PREFERENCES.QUESTION_COUNTS.map((n) => ({ value: n, label: String(n) }))}
           />
           <Segmented id="difficulty-label" label="Difficulty" value={difficulty} onChange={setDifficulty} options={DIFFICULTY_OPTIONS} />
-          {!topicId && <div>
-            <label htmlFor="focus" className="label">
-              Focus <span className="font-normal text-zinc-400">(optional)</span>
-            </label>
-            <input
-              id="focus"
-              value={focus}
-              onChange={(e) => setFocus(e.target.value)}
-              maxLength={200}
-              placeholder="A topic or chapter, e.g. the Calvin cycle"
-              className="input"
-            />
-          </div>}
         </div>
         <div className="flex justify-end border-t border-zinc-200 px-5 py-4 dark:border-zinc-800">
           <button type="button" onClick={generate} className="btn btn-primary">

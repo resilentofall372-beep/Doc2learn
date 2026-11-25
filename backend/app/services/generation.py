@@ -160,6 +160,12 @@ def generate_quiz(
         "hard": "analysis, comparison and reasoning across the material",
     }.get(difficulty, "understanding and application of the ideas")
 
+    distractors = {
+        "easy": "Easy: distractors may be clearly wrong, but still about the same subject.",
+        "medium": "Medium: each distractor is close to the answer (a related idea or a partly true statement); only someone who understood the material picks the right one.",
+        "hard": "Hard: distractors are near-misses that differ from the answer in one important detail.",
+    }.get(difficulty, "Each distractor is close to the answer; only someone who understood the material picks the right one.")
+
     topic_rule, topic_field, topic_menu = _topic_block(None if topic_id else topics)
     prompt = f"""Write {num_questions} multiple-choice questions from the excerpts below.
 Difficulty: {difficulty} ({guidance}).{_focus_line(focus)}
@@ -167,7 +173,12 @@ Difficulty: {difficulty} ({guidance}).{_focus_line(focus)}
 Rules:
 - Every question must be answerable from the excerpts alone.
 - If the excerpts come from several documents, spread questions across them.
-- Exactly four options labelled A-D, all plausible, only one correct. No "all/none of the above".
+- Exactly four options labelled A-D, only one correct. No "all/none of the above".
+- Wrong options (distractors) must be believable to someone who skimmed the material: use related terms,
+  common misconceptions, or statements that are true elsewhere in the excerpts but not for this question.
+  Never use options from an unrelated field (e.g. "hardware manufacturing" in a question about software).
+- All four options match in length, grammar and level of detail, so the answer can't be guessed from its form.
+- {distractors}
 - Vary which letter is correct.
 - "explanation" says why the answer is right and why the distractors are wrong, in 1-3 sentences.
 {SOURCE_RULE}{topic_rule}
@@ -427,8 +438,17 @@ Excerpts:
 def explain(scope: dict, concept: str) -> dict:
     context, legend, used = retrieval.context_for(scope, concept)
     prompt = f"""Explain "{concept}" to a student using the excerpts.
-Structure: one-sentence definition, a plain-language explanation, a concrete example,
-and one common misconception. Cite excerpts. If the material does not cover it, say so.
+Use exactly these four sections, each starting with its heading line:
+### Definition
+(one sentence)
+### In plain language
+(a short paragraph)
+### Example
+(one concrete example)
+### Common misconception
+(one misconception and why it is wrong)
+Cite excerpts once at the end of each section, not after every sentence.
+If the material does not cover it, say so in one line instead of the sections.
 
 Excerpts:
 {context or '(no relevant excerpts found)'}"""
@@ -474,6 +494,8 @@ def _progress_lines(progress: list[dict]) -> str:
             state = f"mastery {t['mastery']}% ({t['quiz']['correct']}/{t['quiz']['answered']} quiz answers right)"
         if t["cards"]["due"]:
             state += f", {t['cards']['due']} flashcards due"
+        if t["cards"].get("new"):
+            state += f", {t['cards']['new']} flashcards not studied yet"
         lines.append(f"{i}. {t['title']}: {state}")
     return "\n".join(lines)
 
@@ -496,15 +518,24 @@ def study_plan(
         )
     outline = ""
     if progress:
+        due = sum(t["cards"]["due"] for t in progress)
+        made = sum(t["cards"]["reviewed"] + t["cards"].get("new", 0) for t in progress)
+        if due:
+            cards = f"{due} flashcards are due now: review them on day 1."
+        elif made:
+            cards = "No flashcards are due today, so don't plan a review of due cards on day 1."
+        else:
+            cards = "The learner has no flashcards yet: plan making them for a topic before any flashcard review."
         outline = f"""
 The project's topics, in learning order, with the learner's progress:
 {_progress_lines(progress)}
 Use these topic titles as each day's "topic". Cover not-started topics in order, give the most time to
-low-mastery topics, put due flashcards early, and leave mastered topics to brief review."""
+low-mastery topics, and leave mastered topics to brief review.
+{cards}"""
     prompt = f"""Create a {days}-day study plan for {_scope_phrase(scope)}.
 Weak areas: {weak}.{perf}{outline}
 Spend more time on weak areas, interleave review, and keep each day to 3-4 concrete activities
-(each under 15 words, e.g. "Take a 5-question quiz on X", "Review due flashcards"). Finish with a review day.
+(each under 15 words, e.g. "Take a 5-question quiz on X", "Make and study flashcards on X"). Finish with a review day.
 Return JSON: {{"plan": [{{"day": int, "topic": str, "activities": [str, ...]}}]}}
 
 Excerpts:

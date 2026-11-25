@@ -8,7 +8,8 @@ Roles:
 Joining is guarded by the invite: the code works for INVITE_HOURS, only while the
 room is in the lobby, and the host can swap it for a new one. Expiry never touches
 people already inside: in-game events check tokens, not the invite. Rooms with no
-activity for STALE_HOURS are closed.
+activity for STALE_HOURS are closed, and so are started or finished rooms that have
+no players left and no activity for EMPTY_MINUTES.
 
 Participant lists are updated read-modify-write under a per-room lock. The app
 runs as a single process (see Dockerfile), so the lock is sufficient; a
@@ -29,6 +30,7 @@ from ..utils import as_utc, random_code, utcnow
 PUBLIC_QUESTION_KEYS = ("question", "options", "source_page")
 INVITE_HOURS = 2
 STALE_HOURS = 6
+EMPTY_MINUTES = 30
 
 _locks: dict[str, threading.Lock] = defaultdict(threading.Lock)
 
@@ -134,7 +136,15 @@ def find_room(identifier: str, *, active_only: bool = True) -> dict | None:
         query["is_active"] = True
     room = get_db()[Collections.ROOMS].find_one(query)
     last_activity = as_utc(room.get("updated_at") or room.get("created_at")) if room else None
-    if room and room.get("is_active") and last_activity and utcnow() - last_activity > timedelta(hours=STALE_HOURS):
+    idle = utcnow() - last_activity if last_activity else None
+    stale = idle is not None and idle > timedelta(hours=STALE_HOURS)
+    abandoned = (
+        idle is not None
+        and idle > timedelta(minutes=EMPTY_MINUTES)
+        and room.get("quiz_state") in ("in_progress", "completed")
+        and not players(room)
+    )
+    if room and room.get("is_active") and (stale or abandoned):
         get_db()[Collections.ROOMS].update_one({"_id": room["_id"]}, {"$set": {"is_active": False, "quiz_state": "closed", "ended_at": utcnow()}})
         return None if active_only else _reload(room)
     return room

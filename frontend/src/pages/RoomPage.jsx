@@ -38,15 +38,7 @@ const RoomPage = () => {
     [roomId, identity?.participant_id, identity?.participant_token]
   );
 
-  useEffect(() => {
-    if (!identity) {
-      // Never joined this room in this browser: send them through the join page.
-      roomAPI
-        .getRoom(roomId)
-        .then((res) => navigate(`/join/${res.data.room.room_code}`, { replace: true }))
-        .catch(() => navigate(exitTo, { replace: true }));
-      return;
-    }
+  const loadRoom = () =>
     roomAPI
       .getRoom(roomId)
       .then((res) => {
@@ -69,6 +61,31 @@ const RoomPage = () => {
         navigate(exitTo);
       })
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    if (identity) {
+      loadRoom();
+      return;
+    }
+    // No credentials in this browser. A signed-in host gets theirs back from the server;
+    // everyone else goes through the join page.
+    const toJoinPage = () =>
+      roomAPI
+        .getRoom(roomId)
+        .then((res) => navigate(`/join/${res.data.room.room_code}`, { replace: true }))
+        .catch(() => navigate(exitTo, { replace: true }));
+    if (!isAuthenticated) {
+      toJoinPage();
+      return;
+    }
+    roomAPI
+      .hostIdentity(roomId)
+      .then((res) => {
+        const { participant_id, participant_token } = res.data;
+        roomIdentity.save(roomId, { participant_id, participant_token, is_host: true });
+        loadRoom();
+      })
+      .catch(toJoinPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 

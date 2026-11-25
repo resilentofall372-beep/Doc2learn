@@ -130,6 +130,17 @@ def new_code(room_id):
     return jsonify({"success": True, "room": rooms.public_room(room)})
 
 
+@bp.get("/<room_id>/host")
+@require_auth
+def host_identity(room_id):
+    """The host's room credentials, for the signed-in host on a browser that lost them."""
+    room = rooms.require_room(clean_str(room_id, 20))
+    host = rooms.host_of(room)
+    if room.get("host_id") != g.user_id or not host:
+        raise ApiError("Room not found", 404)
+    return jsonify({"success": True, "participant_id": host["id"], "participant_token": host["token"]})
+
+
 @bp.get("/<room_id>")
 def get_room(room_id):
     room = rooms.find_room(room_id, active_only=False)

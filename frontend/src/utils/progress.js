@@ -26,7 +26,7 @@ export const dueLabel = (iso) => {
 export const topicRoutes = (projectId, topic) => {
   const base = `/projects/${projectId}`;
   return {
-    learn: `${base}/learn?tool=explain&concept=${encodeURIComponent(topic.title)}`,
+    learn: `${base}/learn?tool=explain&concept=${encodeURIComponent(topic.title)}&topic=${topic.id}`,
     practice: `${base}/flashcards?topic=${topic.id}`,
     review: `${base}/review?topic=${topic.id}`,
     test: `${base}/quiz?topic=${topic.id}`,

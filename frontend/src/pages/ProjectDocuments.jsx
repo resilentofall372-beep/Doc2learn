@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, Clock, FileText, ListChecks, Target } from 'lucide-react';
+import { AlertTriangle, FileText } from 'lucide-react';
 import { documentAPI, errorMessage, projectAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import DocumentUpload from '../components/document/DocumentUpload';
 import DocumentList from '../components/document/DocumentList';
-import StatsCard from '../components/dashboard/StatsCard';
 import EmptyState from '../components/ui/EmptyState';
 
 const EMPTY_STATS = { total_documents: 0, quizzes_taken: 0, average_score: 0, study_time_label: '0s', weakest_documents: [] };
@@ -44,20 +43,6 @@ const Content = ({ projectId, documents, setDocuments }) => {
 
   return (
     <div className="space-y-6">
-      {documents.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatsCard title="Documents" value={documents.length} icon={FileText} />
-          <StatsCard title="Quizzes taken" value={stats.quizzes_taken} icon={ListChecks} />
-          <StatsCard
-            title="Average score"
-            value={stats.quizzes_taken ? `${stats.average_score}%` : '—'}
-            icon={Target}
-            hint={stats.quizzes_taken ? null : 'Take a quiz to see this'}
-          />
-          <StatsCard title="Time in quizzes" value={stats.study_time_label} icon={Clock} />
-        </div>
-      )}
-
       {stats.weakest_documents?.length > 0 && (
         <section className="card">
           <div className="card-header">

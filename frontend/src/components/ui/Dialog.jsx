@@ -1,7 +1,7 @@
 import { useEffect, useId } from 'react';
 import { X } from 'lucide-react';
 
-const WIDTHS = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-3xl' };
+const WIDTHS = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-3xl', xl: 'max-w-5xl' };
 
 /**
  * The one modal used across the app: backdrop, header (icon, title, description, close),

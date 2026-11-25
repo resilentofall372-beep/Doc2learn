@@ -101,13 +101,14 @@ def today():
                 "color": project.get("color", "c0"),
                 "last_opened_at": serialize(project.get("last_opened_at")),
                 "due_cards": overview["due_cards"],
+                "new_cards": overview["new_cards"],
                 "next_step": overview["next_step"],
                 "summary": overview["summary"],
                 "weakest_topic": {"id": weakest["id"], "title": weakest["title"], "mastery": weakest["mastery"]} if weakest else None,
                 "plan_today": plan_today,
             }
         )
-    return jsonify({"success": True, "projects": rows, "due_cards": sum(r["due_cards"] for r in rows)})
+    return jsonify({"success": True, "projects": rows, "due_cards": sum(r["due_cards"] for r in rows), "new_cards": sum(r["new_cards"] for r in rows)})
 
 
 @bp.get("/me")

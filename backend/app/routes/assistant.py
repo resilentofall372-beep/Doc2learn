@@ -16,7 +16,7 @@ from ..extensions import Collections, get_db
 from ..services import generation
 from ..services.progress import topic_progress
 from ..utils import as_utc, clamp, clean_str, to_object_id
-from .topics import topic_list
+from .topics import find_topic, topic_list
 
 bp = Blueprint("assistant", __name__)
 
@@ -132,12 +132,40 @@ def summarize():
 @bp.post("/explain")
 @require_auth
 def explain():
+    """Explain a concept. With `topic_id`, the explanation is saved to that outline topic and
+    the topic counts as learned (the "Learn" step on Overview)."""
     data = request.get_json(silent=True) or {}
     scope = resolve_scope(data)
     concept = clean_str(data.get("concept"), 200)
     if not concept:
         raise ApiError("concept is required")
-    return jsonify({"success": True, **generation.explain(scope_ids(scope), concept)})
+    topic = find_topic(scope["project_id"], g.user_id, clean_str(data.get("topic_id"), 64) or None)
+    result = generation.explain(scope_ids(scope), concept)
+    if topic:
+        now = datetime.now(timezone.utc)
+        saved = {**{k: result[k] for k in ("concept", "explanation", "sources", "legend")}, "topic_id": topic["id"], "created_at": now}
+        get_db()[Collections.TOPICS].update_one(
+            {"project_id": scope["project_id"], "user_id": g.user_id},
+            {"$set": {f"learned.{topic['id']}": now, f"explanations.{topic['id']}": saved}},
+        )
+        result = {**result, "topic_id": topic["id"]}
+    return jsonify({"success": True, **result})
+
+
+@bp.get("/explanations")
+@require_auth
+def explanations():
+    """Saved topic explanations for ?project_id=..., newest first (one per topic)."""
+    project_id = owned_project_id(request.args.get("project_id"))
+    outline = get_db()[Collections.TOPICS].find_one({"project_id": project_id, "user_id": g.user_id}, {"explanations": 1, "topics": 1})
+    titles = {t["id"]: t["title"] for t in (outline or {}).get("topics", [])}
+    rows = [
+        {**row, "topic_title": titles[topic_id], "created_at": as_utc(row["created_at"]).isoformat()}
+        for topic_id, row in ((outline or {}).get("explanations") or {}).items()
+        if topic_id in titles  # topics removed from the outline drop out
+    ]
+    rows.sort(key=lambda r: r["created_at"], reverse=True)
+    return jsonify({"success": True, "explanations": rows})
 
 
 @bp.post("/practice")

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Check, ChevronRight, Copy, FileText, History, Lightbulb, PenLine, RotateCw, Sparkles } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpen, Check, ChevronRight, Copy, History, Layers, Lightbulb, ListChecks, PenLine, RotateCw, Sparkles } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { assistantAPI, errorMessage } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Dialog from '../ui/Dialog';
@@ -9,6 +9,7 @@ import Segmented from '../ui/Segmented';
 import ScopePicker from '../projects/ScopePicker';
 import { useTopics } from '../../hooks/useTopics';
 import { timeAgo } from '../../utils/time';
+import { topicRoutes } from '../../utils/progress';
 
 /**
  * Each tool: what it asks for, how it calls the API, and a short label for its result.
@@ -16,41 +17,25 @@ import { timeAgo } from '../../utils/time';
  */
 const TOOLS = [
   {
-    id: 'summarize',
-    name: 'Summary',
-    description: 'An overview and the key points to remember',
-    icon: FileText,
-    options: { length: 'brief' },
-    run: (projectId, docId, o) => assistantAPI.summarize(projectId, docId, o.length),
-    label: (o) => (o.length === 'brief' ? 'Brief summary' : 'Detailed summary'),
-  },
-  {
     id: 'explain',
     name: 'Explain a concept',
     description: 'Definition, plain explanation, example and a common mistake',
     icon: Lightbulb,
     options: { text: '' },
     required: true,
-    run: (projectId, docId, o) => assistantAPI.explainConcept(projectId, docId, o.text),
+    size: 'xl',
+    // With a topic the explanation is saved to it and the topic's Learn step is ticked.
+    run: (projectId, docId, o) => assistantAPI.explainConcept(projectId, docId, o.text, o.topicId),
     label: (o) => o.text,
   },
   {
     id: 'practice',
-    name: 'Practice problems',
-    description: 'Open questions to answer yourself, with hints and model answers',
+    name: 'Written practice',
+    description: 'Open questions to answer in your own words, with hints and model answers',
     icon: PenLine,
     options: { text: '', count: 5 },
     run: (projectId, docId, o) => assistantAPI.generatePractice(projectId, docId, o.text || 'general', o.count),
     label: (o) => `${o.count} problems${o.text ? ` · ${o.text}` : ''}`,
-  },
-  {
-    id: 'study-plan',
-    name: 'Study plan',
-    description: 'A day-by-day plan that spends more time on what you find hard',
-    icon: CalendarDays,
-    options: { areas: [], days: 7 },
-    run: (projectId, docId, o) => assistantAPI.createStudyPlan(projectId, docId, o.areas, o.days),
-    label: (o) => `${o.days}-day plan${o.areas.length ? ` · focus on ${o.areas.length}` : ''}`,
   },
 ];
 
@@ -60,33 +45,27 @@ const toolById = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
 const Sources = ({ sources }) =>
   sources?.length ? <p className="muted mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">Sources: {sources.map(sourceLabel).join('; ')}</p> : null;
 
-const Result = ({ type, data }) => {
+const Result = ({ type, data, projectId }) => {
   const legend = data.legend;
-  if (type === 'summarize') {
+  if (type === 'explain') {
+    const routes = data.topic_id && projectId ? topicRoutes(projectId, { id: data.topic_id, title: data.concept }) : null;
     return (
       <div>
-        <RichText text={data.summary} legend={legend} className="text-[15px] text-zinc-700 dark:text-zinc-300" />
-        {data.key_points?.length > 0 && (
-          <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
-            <p className="eyebrow">Key points</p>
-            <ul className="mt-2 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
-              {data.key_points.map((point) => (
-                <li key={point} className="flex gap-2">
-                  <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary-600 dark:text-primary-400" />
-                  <span>{point}</span>
-                </li>
-              ))}
-            </ul>
+        <RichText text={data.explanation} legend={legend} className="text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-300" />
+        <Sources sources={data.sources} />
+        {routes && (
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            <span className="muted mr-auto self-center text-xs">Next, check you've got it:</span>
+            <Link to={routes.practice} className="btn btn-primary btn-sm">
+              <Layers className="h-3.5 w-3.5" />
+              Make flashcards for this
+            </Link>
+            <Link to={routes.test} className="btn btn-secondary btn-sm">
+              <ListChecks className="h-3.5 w-3.5" />
+              Quiz me on this
+            </Link>
           </div>
         )}
-      </div>
-    );
-  }
-  if (type === 'explain') {
-    return (
-      <div>
-        <RichText text={data.explanation} legend={legend} className="text-[15px] text-zinc-700 dark:text-zinc-300" />
-        <Sources sources={data.sources} />
       </div>
     );
   }
@@ -118,40 +97,14 @@ const Result = ({ type, data }) => {
       </ol>
     );
   }
-  if (type === 'study-plan') {
-    return (
-      <ol className="relative space-y-4 border-l border-zinc-200 pl-6 dark:border-zinc-800">
-        {data.plan.map((day) => (
-          <li key={day.day} className="relative">
-            <span className="absolute -left-[37px] grid h-6 w-6 place-items-center rounded-full bg-primary-600 text-[11px] font-semibold tabular-nums text-white dark:bg-primary-500">
-              {day.day}
-            </span>
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Day {day.day} · {day.topic}
-            </p>
-            <ul className="mt-1.5 space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-              {day.activities.map((a) => (
-                <li key={a} className="flex gap-2">
-                  <span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-zinc-400" />
-                  {a}
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ol>
-    );
-  }
   return null;
 };
 
 /** Plain-text version of a result, for the Copy button. */
 const asText = (type, data) => {
-  if (type === 'summarize') return [data.summary, '', 'Key points:', ...(data.key_points || []).map((p) => `- ${p}`)].join('\n');
   if (type === 'explain') return data.explanation;
   if (type === 'practice')
     return (data.problems || []).map((p, i) => `${i + 1}. ${p.question}\nHint: ${p.hint}\nAnswer: ${p.answer}`).join('\n\n');
-  if (type === 'study-plan') return (data.plan || []).map((d) => `Day ${d.day}: ${d.topic}\n${d.activities.map((a) => `- ${a}`).join('\n')}`).join('\n\n');
   return '';
 };
 
@@ -191,20 +144,6 @@ const ToolFields = ({ tool, options, setOptions, topics }) => {
     return [...new Set(all)].slice(0, 14);
   }, [topics]);
 
-  if (tool.id === 'summarize') {
-    return (
-      <Segmented
-        id="summary-length"
-        label="Length"
-        value={options.length}
-        onChange={(length) => set({ length })}
-        options={[
-          { value: 'brief', label: 'Brief', hint: 'A paragraph' },
-          { value: 'detailed', label: 'Detailed', hint: 'A few paragraphs' },
-        ]}
-      />
-    );
-  }
   if (tool.id === 'explain') {
     return (
       <div>
@@ -234,46 +173,11 @@ const ToolFields = ({ tool, options, setOptions, topics }) => {
       </div>
     );
   }
-  if (tool.id === 'study-plan') {
-    const toggle = (area) => set({ areas: options.areas.includes(area) ? options.areas.filter((a) => a !== area) : [...options.areas, area].slice(0, 10) });
-    return (
-      <div className="space-y-5">
-        <Segmented
-          id="plan-days"
-          label="Length"
-          value={options.days}
-          onChange={(days) => set({ days })}
-          options={[
-            { value: 3, label: '3 days', hint: 'Before a test' },
-            { value: 7, label: '7 days', hint: 'A week' },
-            { value: 14, label: '14 days', hint: 'Two weeks' },
-          ]}
-        />
-        <div>
-          <span className="label">
-            What do you find hard? <span className="font-normal text-zinc-400">(optional)</span>
-          </span>
-          {topicTitles.length > 0 ? (
-            <Chips items={topicTitles} selected={options.areas} onPick={toggle} />
-          ) : (
-            <input
-              value={options.areasText || ''}
-              onChange={(e) => set({ areasText: e.target.value })}
-              placeholder="Topics, separated by commas"
-              aria-label="Topics you find hard"
-              className="input"
-            />
-          )}
-          <p className="hint">Your past quiz scores are taken into account too.</p>
-        </div>
-      </div>
-    );
-  }
   return null;
 };
 
 // --------------------------------------------------------------------------- dialog
-const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, onClose, onResult }) => {
+const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, autoRun, onClose, onResult }) => {
   const [options, setOptions] = useState(() => initial?.options || { ...tool.options, ...(preset || {}) });
   const [documentId, setDocumentId] = useState(initial?.documentId || '');
   const [result, setResult] = useState(initial || null);
@@ -286,9 +190,10 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
     e?.preventDefault();
     if (!ready || loading) return;
     const clean = { ...options, ...(typeof options.text === 'string' ? { text: options.text.trim() } : {}) };
-    if (clean.areas) {
-      const typed = (clean.areasText || '').split(',');
-      clean.areas = [...new Set([...clean.areas, ...typed].map((a) => a.trim()).filter(Boolean))].slice(0, 10);
+    if (tool.id === 'explain') {
+      // Explaining an outline topic saves it to that topic (the link from Overview names the topic).
+      const byTitle = topics.find((t) => t.title.toLowerCase() === clean.text.toLowerCase());
+      clean.topicId = byTitle?.id || (preset?.topicId && clean.text === preset.text ? preset.topicId : undefined);
     }
     setLoading(true);
     setError(null);
@@ -313,6 +218,16 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
     }
   };
 
+  // "Learn it" links start generating straight away instead of waiting for a second click.
+  const autoRan = useRef(false); // StrictMode runs effects twice in development
+  useEffect(() => {
+    if (autoRun && !initial && !autoRan.current) {
+      autoRan.current = true;
+      run();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(asText(result.type, result.data));
@@ -324,7 +239,7 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
   };
 
   return (
-    <Dialog open onClose={onClose} size="lg" icon={tool.icon} title={tool.name} description={tool.description}>
+    <Dialog open onClose={onClose} size={tool.size || 'lg'} icon={tool.icon} title={tool.name} description={tool.description}>
         <div>
           <form onSubmit={run} className="space-y-5 border-b border-zinc-200 p-5 dark:border-zinc-800">
             {documents.length > 1 && (
@@ -358,7 +273,7 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
                   {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <Result type={result.type} data={result.data} />
+              <Result type={result.type} data={result.data} projectId={projectId} />
             </section>
           )}
 
@@ -375,21 +290,52 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
 };
 
 // --------------------------------------------------------------------------- sidebar
-/** Study tools for a project: a list of tools, and what you made with them this visit. */
+/** A saved topic explanation in the shape the dialog reopens. */
+const savedEntry = (row) => ({
+  id: `saved-${row.topic_id}`,
+  type: 'explain',
+  label: row.topic_title || row.concept,
+  scope: 'Saved to this topic',
+  options: { text: row.concept, topicId: row.topic_id },
+  documentId: '',
+  data: row,
+  createdAt: row.created_at,
+});
+
+/** Study tools for a project: the tools, saved topic explanations, and practice sets made this visit. */
 const QuickActions = ({ projectId, documents }) => {
   const { topics } = useTopics(projectId);
-  const [open, setOpen] = useState(null); // { toolId, entry?, preset? }
+  const [open, setOpen] = useState(null); // { toolId, entry?, preset?, autoRun? }
   const [recent, setRecent] = useState([]);
+  const [saved, setSaved] = useState([]);
   const [params, setParams] = useSearchParams();
 
-  // Links like ?tool=explain&concept=Calvin%20cycle open a tool ready to run (from Overview or quiz results).
+  const loadSaved = useCallback(() => {
+    assistantAPI
+      .explanations(projectId)
+      .then((res) => setSaved((res.data.explanations || []).map(savedEntry)))
+      .catch(() => {});
+  }, [projectId]);
+
+  useEffect(() => {
+    loadSaved();
+  }, [loadSaved]);
+
+  // Links like ?tool=explain&concept=Calvin%20cycle&topic=t3 (from Overview, the map or quiz results)
+  // open the tool and, with a concept, start generating right away.
   useEffect(() => {
     const toolId = params.get('tool');
     if (!toolById[toolId]) return;
     const text = params.get('concept') || '';
-    setOpen({ toolId, preset: text ? { text } : {} });
+    const topicId = params.get('topic') || undefined;
+    setOpen({ toolId, preset: text ? { text, topicId } : {}, autoRun: Boolean(text) });
     setParams({}, { replace: true });
   }, [params, setParams]);
+
+  const onResult = (entry) => {
+    if (entry.type === 'explain' && entry.data.topic_id) loadSaved();
+    else setRecent((prev) => [entry, ...prev].slice(0, 12));
+  };
 
   const close = useCallback(() => setOpen(null), []);
   const openTool = open ? toolById[open.toolId] : null;
@@ -425,6 +371,34 @@ const QuickActions = ({ projectId, documents }) => {
           })}
         </ul>
       </section>
+
+      {saved.length > 0 && (
+        <section className="card">
+          <div className="card-header py-3">
+            <h2 className="card-title flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-zinc-400" />
+              Saved explanations
+            </h2>
+          </div>
+          <ul className="max-h-72 space-y-0.5 overflow-y-auto p-2">
+            {saved.map((entry) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  onClick={() => setOpen({ toolId: 'explain', entry })}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <Lightbulb className="h-3.5 w-3.5 flex-shrink-0 text-zinc-400" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{entry.label}</span>
+                    <span className="muted block truncate text-xs">Explained {timeAgo(entry.createdAt)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {recent.length > 0 && (
         <section className="card">
@@ -470,8 +444,9 @@ const QuickActions = ({ projectId, documents }) => {
           topics={topics}
           initial={open.entry}
           preset={open.preset}
+          autoRun={open.autoRun}
           onClose={close}
-          onResult={(entry) => setRecent((prev) => [entry, ...prev].slice(0, 12))}
+          onResult={onResult}
         />
       )}
     </aside>

@@ -129,7 +129,7 @@ const Projects = () => {
         }
       />
 
-      {projects.length > 0 && <TodayPanel />}
+      {projects.length > 0 && <TodayPanel expected={projects.length} />}
 
       {projects.length === 0 ? (
         <div className="card">

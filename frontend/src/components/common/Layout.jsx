@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FolderOpen, LogOut, Menu, Plus, Radio, X } from 'lucide-react';
+import { ChevronLeft, FolderOpen, LogOut, Menu, Radio, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProjectData } from '../../services/projectStore';
 import { SECTIONS, sectionFor } from '../projects/sections';
@@ -48,7 +48,7 @@ const navItem = (active, nested = false) =>
 const ProjectNav = ({ projectId, pathname, onNavigate }) => {
   const data = useProjectData(projectId);
   const base = `/projects/${projectId}`;
-  const { section: current, page } = sectionFor(pathname.slice(base.length));
+  const { section: current } = sectionFor(pathname.slice(base.length));
   const project = data?.project;
   const count = data?.documents?.length;
 
@@ -74,31 +74,16 @@ const ProjectNav = ({ projectId, pathname, onNavigate }) => {
           const active = current.key === section.key;
           return (
             <div key={section.key}>
-              <Link to={`${base}${section.path}`} onClick={onNavigate} className={navItem(active && !section.children)} aria-current={active ? 'page' : undefined}>
+              {/* Practice's Quiz / Flashcards / Review are tabs on its pages, not extra menu items. */}
+              <Link to={`${base}${section.path}`} onClick={onNavigate} className={navItem(active)} aria-current={active ? 'page' : undefined}>
                 <Icon className="h-4 w-4" strokeWidth={2} />
                 {section.label}
               </Link>
-              {section.children && (
-                <div className="mt-0.5 space-y-0.5">
-                  {section.children.map((child) => {
-                    const childActive = page.child?.key === child.key;
-                    return (
-                      <Link key={child.key} to={`${base}${child.path}`} onClick={onNavigate} className={navItem(childActive, true)} aria-current={childActive ? 'page' : undefined}>
-                        {child.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           );
         })}
       </nav>
 
-      <Link to={`${pathname}?add=1`} onClick={onNavigate} className="btn btn-secondary btn-sm mt-4 w-full">
-        <Plus className="h-3.5 w-3.5" />
-        Add documents
-      </Link>
     </div>
   );
 };

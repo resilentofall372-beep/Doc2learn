@@ -147,10 +147,6 @@ const ProjectLayout = ({ children, needsDocuments = true, actions = null }) => {
               Host live quiz
             </Link>
           )}
-          <button type="button" onClick={addDocuments} className="btn btn-primary">
-            <Plus className="h-4 w-4" />
-            Add documents
-          </button>
         </div>
       </header>
 

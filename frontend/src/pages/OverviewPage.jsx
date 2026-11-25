@@ -84,6 +84,7 @@ const TopicProgress = ({ topic, index, projectId }) => {
   const facts = [
     quiz.answered ? `${quiz.correct}/${quiz.answered} quiz answers right` : null,
     cards.reviewed ? `${cards.known}/${cards.reviewed} cards known` : null,
+    cards.new ? `${cards.new} new ${cards.new === 1 ? 'card' : 'cards'} to study` : null,
   ].filter(Boolean);
 
   return (
@@ -105,7 +106,7 @@ const TopicProgress = ({ topic, index, projectId }) => {
           </div>
           <p className="muted mt-1 text-xs">{facts.length ? facts.join(' · ') : 'No quiz answers or card ratings yet'}</p>
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <Step to={routes.learn} icon={BookOpen} label="Learn" />
+            <Step to={routes.learn} icon={BookOpen} label="Learn" done={topic.learned} />
             <ArrowRight className="h-3 w-3 text-zinc-300 dark:text-zinc-600" />
             <Step to={routes.practice} icon={Layers} label="Practice" done={cards.reviewed > 0} />
             <ArrowRight className="h-3 w-3 text-zinc-300 dark:text-zinc-600" />
@@ -262,22 +263,33 @@ const Overview = ({ projectId, documents, addDocuments }) => {
     <div className="space-y-6">
       <NextStep projectId={projectId} step={data.next_step} onAddDocuments={addDocuments} />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatsCard
           title="Topics mastered"
           tone="success"
           value={summary.topics ? `${summary.mastered} / ${summary.topics}` : '—'}
           icon={CircleCheck}
-          hint={summary.topics ? `${summary.started} started` : 'Build the outline to track topics'}
+          hint={
+            !summary.topics
+              ? 'Build the outline to track topics'
+              : summary.average_mastery == null
+                ? 'Quizzes and card ratings count'
+                : `${summary.started} started · ${summary.average_mastery}% average mastery`
+          }
         />
         <StatsCard
-          title="Average mastery"
-          tone="primary"
-          value={summary.average_mastery == null ? '—' : `${summary.average_mastery}%`}
-          icon={Target}
-          hint={summary.average_mastery == null ? 'Quizzes and card ratings count' : 'Across started topics'}
+          title="Cards due"
+          value={data.due_cards}
+          icon={Repeat}
+          tone={data.due_cards ? 'warning' : 'neutral'}
+          hint={
+            data.due_cards
+              ? 'Review them today'
+              : data.new_cards
+                ? `${data.new_cards} new ${data.new_cards === 1 ? 'card' : 'cards'} to study`
+                : 'All caught up'
+          }
         />
-        <StatsCard title="Cards due" value={data.due_cards} icon={Repeat} tone={data.due_cards ? 'warning' : 'neutral'} hint={data.due_cards ? 'Review them today' : 'All caught up'} />
         <StatsCard
           title="Quiz average"
           value={stats.quizzes_taken ? `${stats.average_score}%` : '—'}

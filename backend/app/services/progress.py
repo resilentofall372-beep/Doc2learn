@@ -4,12 +4,18 @@ Mastery (0-100) comes from two kinds of evidence per topic:
 - quiz answers: the share right among the latest 20 answers to questions tagged with the topic;
 - flashcards: the share of the topic's reviewed cards whose last rating was good or easy.
 Quiz answers weigh more (70/30) because they are graded, while card ratings are self-reported.
+That share is `accuracy`. Mastery is accuracy scaled down until there are MIN_EVIDENCE answers
+and reviews, so one lucky answer reads as 20%, not 100%.
 
 Status per topic:
 - not_started: no quiz answers and no card reviews yet;
 - review_due:  flashcards for it are due now;
-- mastered:    mastery >= 80 with at least 4 quiz answers;
+- mastered:    mastery >= 80 with at least 5 quiz answers and, if it has reviewed cards,
+               one card that has come back after a gap of 3+ days (spaced review);
 - learning:    anything in between.
+
+`learned` is set once the learner has generated an explanation of the topic ("Learn it").
+Cards are `new` while they sit in the topic's latest deck without ever being rated.
 """
 from __future__ import annotations
 
@@ -17,12 +23,45 @@ from collections import defaultdict
 from datetime import datetime
 
 from ..extensions import Collections, get_db
+from . import srs
 from ..utils import as_utc, utcnow
 
 RECENT_ANSWERS = 20
 MASTERED_AT = 80
-MIN_ANSWERS_FOR_MASTERY = 4
+MIN_ANSWERS_FOR_MASTERY = 5
+MIN_EVIDENCE = 5  # answers + reviewed cards before mastery can reach its full value
+SPACED_DAYS = 3  # a reviewed card's interval must reach this before the topic counts as mastered
 WEAK_BELOW = 60
+
+
+def _latest_decks(user_id: str, project_id: str) -> list[dict]:
+    """The newest deck per (document, topic): the ones the Flashcards page shows."""
+    latest: dict[tuple, dict] = {}
+    for deck in get_db()[Collections.FLASHCARDS].find(
+        {"user_id": user_id, "project_id": project_id},
+        {"document_id": 1, "topic_id": 1, "flashcards": 1, "created_at": 1},
+    ).sort("created_at", -1):
+        latest.setdefault((deck.get("document_id"), deck.get("topic_id")), deck)
+    return list(latest.values())
+
+
+def new_cards(user_id: str, project_id: str, reviewed_keys: set[str] | None = None) -> dict[str | None, int]:
+    """Never-rated cards in the latest decks, counted per topic id (None = no topic)."""
+    if reviewed_keys is None:
+        reviewed_keys = {
+            r["card_key"]
+            for r in get_db()[Collections.CARD_REVIEWS].find({"user_id": user_id, "project_id": project_id}, {"card_key": 1})
+        }
+    counts: dict[str | None, int] = defaultdict(int)
+    seen: set[str] = set()
+    for deck in _latest_decks(user_id, project_id):
+        for card in deck.get("flashcards") or []:
+            key = srs.card_key(card)
+            if key in reviewed_keys or key in seen:
+                continue
+            seen.add(key)
+            counts[card.get("topic_id") or deck.get("topic_id")] += 1
+    return counts
 
 
 def due_count(user_id: str, project_id: str, now: datetime | None = None) -> int:
@@ -31,10 +70,13 @@ def due_count(user_id: str, project_id: str, now: datetime | None = None) -> int
     )
 
 
-def topic_progress(user_id: str, project_id: str, topics: list[dict], now: datetime | None = None) -> list[dict]:
-    """Progress for every topic in the outline, in outline order."""
+def topic_progress(
+    user_id: str, project_id: str, topics: list[dict], now: datetime | None = None, learned: dict | None = None
+) -> list[dict]:
+    """Progress for every topic in the outline, in outline order. `learned`: the outline's {topic_id: when}."""
     now = now or utcnow()
     db = get_db()
+    learned = learned or {}
 
     answers: dict[str, list[bool]] = defaultdict(list)
     attempts = db[Collections.QUIZ_ATTEMPTS].find(
@@ -47,23 +89,36 @@ def topic_progress(user_id: str, project_id: str, topics: list[dict], now: datet
             if topic_id and len(answers[topic_id]) < RECENT_ANSWERS:
                 answers[topic_id].append(bool(result.get("is_correct")))
 
-    cards: dict[str, dict] = defaultdict(lambda: {"reviewed": 0, "due": 0, "known": 0})
+    def empty_bucket():
+        return {"reviewed": 0, "due": 0, "known": 0, "new": 0, "spaced": False}
+
+    cards: dict[str, dict] = defaultdict(empty_bucket)
+    reviewed_keys: set[str] = set()
     for review in db[Collections.CARD_REVIEWS].find(
-        {"user_id": user_id, "project_id": project_id, "topic_id": {"$ne": None}},
-        {"topic_id": 1, "due_at": 1, "last_rating": 1},
+        {"user_id": user_id, "project_id": project_id},
+        {"card_key": 1, "topic_id": 1, "due_at": 1, "last_rating": 1, "interval_days": 1},
     ):
+        reviewed_keys.add(review.get("card_key"))
+        if not review.get("topic_id"):
+            continue
         bucket = cards[review["topic_id"]]
         bucket["reviewed"] += 1
         if review.get("last_rating") in ("good", "easy"):
             bucket["known"] += 1
+        if (review.get("interval_days") or 0) >= SPACED_DAYS:
+            bucket["spaced"] = True
         due = as_utc(review.get("due_at"))
         if due and due <= now:
             bucket["due"] += 1
+    for topic_id, count in new_cards(user_id, project_id, reviewed_keys).items():
+        if topic_id:
+            cards[topic_id]["new"] += count
 
     rows = []
     for topic in topics:
         given = answers.get(topic["id"], [])
-        card = cards.get(topic["id"], {"reviewed": 0, "due": 0, "known": 0})
+        card = {k: v for k, v in cards.get(topic["id"], empty_bucket()).items() if k != "spaced"}
+        spaced = cards.get(topic["id"], empty_bucket())["spaced"]
         answered, correct = len(given), sum(given)
 
         parts = []
@@ -71,13 +126,15 @@ def topic_progress(user_id: str, project_id: str, topics: list[dict], now: datet
             parts.append((0.7, correct / answered))
         if card["reviewed"]:
             parts.append((0.3, card["known"] / card["reviewed"]))
-        mastery = round(100 * sum(w * v for w, v in parts) / sum(w for w, _ in parts)) if parts else None
+        accuracy = sum(w * v for w, v in parts) / sum(w for w, _ in parts) if parts else None
+        evidence = min(1.0, (answered + card["reviewed"]) / MIN_EVIDENCE)
+        mastery = round(100 * accuracy * evidence) if accuracy is not None else None
 
         if mastery is None:
             status = "not_started"
         elif card["due"]:
             status = "review_due"
-        elif mastery >= MASTERED_AT and answered >= MIN_ANSWERS_FOR_MASTERY:
+        elif mastery >= MASTERED_AT and answered >= MIN_ANSWERS_FOR_MASTERY and (spaced or not card["reviewed"]):
             status = "mastered"
         else:
             status = "learning"
@@ -89,7 +146,9 @@ def topic_progress(user_id: str, project_id: str, topics: list[dict], now: datet
                 "summary": topic.get("summary", ""),
                 "subtopics": topic.get("subtopics", []),
                 "mastery": mastery,
+                "accuracy": round(100 * accuracy) if accuracy is not None else None,
                 "status": status,
+                "learned": topic["id"] in learned,
                 "quiz": {"answered": answered, "correct": correct},
                 "cards": card,
             }
@@ -110,19 +169,29 @@ def next_step(*, document_count: int, has_outline: bool, pending_documents: int,
         noun = "card is" if due == 1 else "cards are"
         return {"kind": "review", "title": f"Review {due} flashcards", "detail": f"{due} {noun} due. Short reviews now keep them from slipping.", "count": due}
 
-    started = [t for t in topics if t["mastery"] is not None]
-    weak = sorted((t for t in started if t["status"] != "mastered" and t["mastery"] < WEAK_BELOW), key=lambda t: t["mastery"])
+    # Weak = got a lot wrong (raw accuracy), not just "little evidence yet".
+    def accuracy(t):
+        return t.get("accuracy", t["mastery"])
+
+    weak = sorted(
+        (t for t in topics if t["status"] != "mastered" and t["mastery"] is not None and accuracy(t) < WEAK_BELOW),
+        key=accuracy,
+    )
     if weak:
         t = weak[0]
         return {"kind": "strengthen", "title": f"Strengthen “{t['title']}”", "detail": f"Mastery {t['mastery']}%. Re-learn it, then take a short quiz.", "topic_id": t["id"], "topic_title": t["title"]}
-    fresh = [t for t in topics if t["status"] == "not_started"]
-    if fresh:
-        t = fresh[0]
-        return {"kind": "start_topic", "title": f"Start “{t['title']}”", "detail": t.get("summary") or "Learn it, then check yourself with a quiz.", "topic_id": t["id"], "topic_title": t["title"]}
-    pending = sorted((t for t in started if t["status"] != "mastered"), key=lambda t: t["mastery"])
-    if pending:
-        t = pending[0]
-        return {"kind": "test_topic", "title": f"Test yourself on “{t['title']}”", "detail": f"Mastery {t['mastery']}%. A few more right answers will lock it in.", "topic_id": t["id"], "topic_title": t["title"]}
+    # Otherwise finish topics in outline order before starting the next one.
+    for t in topics:
+        if t["status"] == "mastered":
+            continue
+        if t["mastery"] is None and not t.get("learned"):
+            return {"kind": "start_topic", "title": f"Start “{t['title']}”", "detail": t.get("summary") or "Learn it, then check yourself with a quiz.", "topic_id": t["id"], "topic_title": t["title"]}
+        detail = (
+            f"Mastery {t['mastery']}%. A few more right answers will lock it in."
+            if t["mastery"] is not None
+            else "You've read the explanation. Check yourself with a short quiz."
+        )
+        return {"kind": "test_topic", "title": f"Test yourself on “{t['title']}”", "detail": detail, "topic_id": t["id"], "topic_title": t["title"]}
     if topics:
         return {"kind": "all_mastered", "title": "Every topic is mastered", "detail": "Keep it fresh with a mixed, hard quiz across the project."}
     return {"kind": "build_outline", "title": "Add topics to the outline", "detail": "The outline is empty. Rebuild it or add topics by hand."}
@@ -138,7 +207,7 @@ def project_overview(user_id: str, project_id: str) -> dict:
     covered = set(outline.get("document_ids", [])) if outline else set()
     pending = len([d for d in doc_ids if d not in covered]) if outline else 0
 
-    progress = topic_progress(user_id, project_id, topics, now)
+    progress = topic_progress(user_id, project_id, topics, now, learned=(outline or {}).get("learned"))
     due = due_count(user_id, project_id, now)
     started = [t for t in progress if t["mastery"] is not None]
     return {
@@ -147,6 +216,7 @@ def project_overview(user_id: str, project_id: str) -> dict:
         "pending_documents": pending,
         "topics": progress,
         "due_cards": due,
+        "new_cards": sum(new_cards(user_id, project_id).values()),
         "summary": {
             "topics": len(progress),
             "mastered": sum(1 for t in progress if t["status"] == "mastered"),

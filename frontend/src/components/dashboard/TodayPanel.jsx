@@ -49,26 +49,44 @@ const ProjectRow = ({ row }) => {
   );
 };
 
-/** "What to do today" across every project. Hidden until there is something to show. */
-const TodayPanel = () => {
+const MAX_ROWS = 4;
+
+/** Same shape as a loaded row, so the page below doesn't move when the data arrives. */
+const SkeletonRow = () => (
+  <li className="flex items-center gap-3 px-5 py-4" aria-hidden="true">
+    <span className="h-8 w-8 flex-shrink-0 animate-pulse rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+    <div className="flex-1 space-y-2">
+      <div className="h-3.5 w-1/2 animate-pulse rounded bg-zinc-200 dark:bg-zinc-800" />
+      <div className="h-3 w-1/3 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800/60" />
+    </div>
+  </li>
+);
+
+/**
+ * "What to do today" across every project. While loading it holds the space of `expected`
+ * rows (the number of projects the page already knows about); hidden if there is nothing to show.
+ */
+const TodayPanel = ({ expected = 1 }) => {
   const [data, setData] = useState(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
     statsAPI
       .today()
       .then((res) => alive && setData(res.data))
-      .catch(() => {});
+      .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
   }, []);
 
-  if (!data || !data.projects.length) return null;
-  const rows = data.projects.slice(0, 4);
+  if (failed || (data && !data.projects.length)) return null;
+  const rows = data ? data.projects.slice(0, MAX_ROWS) : null;
+  const newCards = data?.new_cards || 0;
 
   return (
-    <section className="card mb-8">
+    <section className="card mb-8" aria-busy={!data}>
       <div className="card-header">
         <div className="flex items-center gap-3">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">
@@ -77,17 +95,21 @@ const TodayPanel = () => {
           <div>
             <h2 className="card-title">Today</h2>
             <p className="muted text-xs">
-              {data.due_cards
-                ? `${data.due_cards} flashcards are due across your projects.`
-                : 'No flashcards due. Pick up where you left off.'}
+              {!data
+                ? 'Loading…'
+                : data.due_cards
+                  ? `${data.due_cards} flashcards are due across your projects.`
+                  : newCards
+                    ? `No flashcards due. ${newCards} new ${newCards === 1 ? 'card is' : 'cards are'} waiting to be studied.`
+                    : 'No flashcards due. Pick up where you left off.'}
             </p>
           </div>
         </div>
       </div>
       <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
-        {rows.map((row) => (
-          <ProjectRow key={row._id} row={row} />
-        ))}
+        {rows
+          ? rows.map((row) => <ProjectRow key={row._id} row={row} />)
+          : Array.from({ length: Math.min(Math.max(expected, 1), MAX_ROWS) }, (_, i) => <SkeletonRow key={i} />)}
       </ul>
     </section>
   );
