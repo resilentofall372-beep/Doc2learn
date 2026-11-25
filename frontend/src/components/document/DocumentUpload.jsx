@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CircleAlert, CircleCheck, ClipboardPaste, FileText, RotateCw, UploadCloud, X } from 'lucide-react';
 import { documentAPI, errorMessage } from '../../services/api';
 import { useApp } from '../../contexts/AppContext';

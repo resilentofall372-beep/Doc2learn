@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, RotateCcw, Shuffle } from 'lucide-react';
 import Flashcard from './Flashcard';
 import { RATINGS, dueLabel } from '../../utils/progress';

@@ -1,6 +1,5 @@
 export const QUIZ_PREFERENCES = {
   QUESTION_COUNTS: [3, 5, 10, 15, 20],
-  DIFFICULTY_LEVELS: ['easy', 'medium', 'hard'],
 };
 
 export const UPLOAD_CONFIG = {

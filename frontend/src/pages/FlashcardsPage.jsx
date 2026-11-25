@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Layers, RefreshCw } from 'lucide-react';
-import { errorMessage, flashcardsAPI } from '../services/api';
-import { useApp } from '../contexts/AppContext';
+import { flashcardsAPI } from '../services/api';
+import { useTask } from '../hooks/useTask';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
 import TopicPicker, { useTopics } from '../components/projects/TopicPicker';
@@ -15,7 +15,7 @@ import { newerDocuments } from '../utils/time';
 import { cardPayload } from '../utils/progress';
 
 const Deck = ({ projectId, documents }) => {
-  const { addNotification } = useApp();
+  const run = useTask();
   const [params, setParams] = useSearchParams();
   const wanted = params.get('document');
   const documentId = documents.some((d) => d._id === wanted) ? wanted : '';
@@ -42,50 +42,38 @@ const Deck = ({ projectId, documents }) => {
       { replace: true }
     );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await flashcardsAPI.getFlashcards(projectId, documentId || null, topicId || null);
-      setFlashcards(res.data.flashcards || []);
-      setGeneratedAt(res.data.generated_at || null);
-      setSchedule(res.data.schedule || {});
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not load flashcards', message: errorMessage(error) });
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, documentId, topicId, addNotification]);
+  const load = useCallback(
+    () =>
+      run('Could not load flashcards', async () => {
+        const res = await flashcardsAPI.getFlashcards(projectId, documentId || null, topicId || null);
+        setFlashcards(res.data.flashcards || []);
+        setGeneratedAt(res.data.generated_at || null);
+        setSchedule(res.data.schedule || {});
+      }, setLoading),
+    [projectId, documentId, topicId, run]
+  );
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const generate = async () => {
-    setGenerating(true);
-    try {
+  const generate = () =>
+    run('Could not generate flashcards', async () => {
       const res = await flashcardsAPI.generate({ projectId, documentId: documentId || null, topicId: topicId || null, num_cards: numCards });
       setFlashcards(res.data.flashcards || []);
       setGeneratedAt(res.data.generated_at || new Date().toISOString());
       setSchedule({});
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not generate flashcards', message: errorMessage(error) });
-    } finally {
-      setGenerating(false);
-    }
-  };
+    }, setGenerating);
 
   // Save a rating: it schedules the card's next review and counts towards the topic's mastery.
   const rate = useCallback(
-    async (card, rating) => {
-      try {
+    (card, rating) =>
+      run('Could not save your rating', async () => {
         const res = await flashcardsAPI.review(projectId, cardPayload(card), rating, documentId || null);
         setSchedule((prev) => ({ ...prev, [res.data.card_id]: { due_at: res.data.due_at, last_rating: res.data.last_rating } }));
         setRatings((n) => n + 1);
-      } catch (error) {
-        addNotification({ type: 'error', title: 'Could not save your rating', message: errorMessage(error) });
-      }
-    },
-    [projectId, documentId, addNotification]
+      }),
+    [projectId, documentId, run]
   );
 
   // Topic names on the cards; memoised so the deck doesn't reset on every render.

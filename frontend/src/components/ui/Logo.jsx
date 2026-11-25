@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 
 export const LogoMark = ({ className = 'h-7 w-7' }) => (

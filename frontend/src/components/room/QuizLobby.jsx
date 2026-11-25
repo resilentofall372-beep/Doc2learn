@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Copy, Crown, Play, RefreshCw, Sparkles } from 'lucide-react';
 import { documentAPI, errorMessage, healthAPI } from '../../services/api';
 import Avatar from '../ui/Avatar';

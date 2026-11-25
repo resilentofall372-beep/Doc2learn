@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FolderPlus, Pencil } from 'lucide-react';
 import { AVATAR_COLORS } from '../ui/Avatar';
 import Dialog from '../ui/Dialog';

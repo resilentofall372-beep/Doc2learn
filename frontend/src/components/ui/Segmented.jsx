@@ -1,4 +1,3 @@
-import React from 'react';
 
 /** A row of mutually exclusive options. `options` is [{ value, label, hint? }]. */
 const Segmented = ({ options, value, onChange, columns, label, id }) => (

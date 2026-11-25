@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Clock, X } from 'lucide-react';
 import Avatar from '../ui/Avatar';
 

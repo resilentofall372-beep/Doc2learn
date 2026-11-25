@@ -5,7 +5,7 @@ import axios from 'axios';
 import { storage } from './storage';
 import { STORAGE_KEYS } from '../utils/constants';
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -68,7 +68,6 @@ export const documentAPI = {
     return api.post('/document/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   paste: (projectId, title, text) => api.post('/document/paste', { project_id: projectId, title, text }),
-  getDocument: (documentId) => api.get(`/document/${documentId}`),
   deleteDocument: (documentId) => api.delete(`/document/${documentId}`),
   generateQuiz: ({ projectId, documentId, topicId, num_questions, difficulty, focus }) =>
     api.post('/document/generate-quiz', {
@@ -90,8 +89,6 @@ export const documentAPI = {
 export const quizAPI = {
   submitQuiz: ({ quiz_id, answers, time_spent_seconds }) =>
     api.post('/quiz/submit', { quiz_id, answers, time_spent_seconds }),
-  getQuiz: (quizId) => api.get(`/quiz/${quizId}`),
-  getProjectAttempts: (projectId) => api.get(`/quiz/project/${projectId}`),
 };
 
 export const flashcardsAPI = {
@@ -129,7 +126,6 @@ export const assistantAPI = {
     api.post('/assistant/summarize', { ...scope(projectId, documentId), summary_type: summaryType }),
   createStudyPlan: (projectId, documentId, weakAreas, days = 7) =>
     api.post('/assistant/study-plan', { ...scope(projectId, documentId), weak_areas: weakAreas, days }),
-  getStudyPlan: (projectId) => api.get(`/assistant/study-plan/${projectId}`),
   markPlanDay: (projectId, day, done = true) => api.post(`/assistant/study-plan/${projectId}/done`, { day, done }),
   getChatHistory: (projectId) => api.get(`/assistant/chat/history/${projectId}`),
   clearChat: (sessionId) => api.post('/assistant/chat/clear', { session_id: sessionId }),
@@ -140,7 +136,6 @@ export const healthAPI = {
 };
 
 export const statsAPI = {
-  me: () => api.get('/stats/me'),
   /** What to do today across projects. */
   today: () => api.get('/stats/today'),
 };
@@ -153,5 +148,3 @@ export const roomAPI = {
   getRoomByCode: (roomCode) => api.get(`/room/code/${roomCode}`),
   leave: (data) => api.post('/room/leave', data),
 };
-
-export default api;

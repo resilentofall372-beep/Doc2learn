@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, BookOpen, RotateCcw } from 'lucide-react';
 import { assistantAPI, errorMessage } from '../../services/api';
 import ChatMessage from './ChatMessage';

@@ -1,4 +1,3 @@
-import React from 'react';
 
 /** Choose "Whole project" or a single document. `value` is a document id, or '' for the whole project. */
 const ScopePicker = ({ documents, value, onChange, label = 'Source', id = 'scope' }) => (

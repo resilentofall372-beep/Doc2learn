@@ -1,4 +1,3 @@
-import React from 'react';
 
 /**
  * Minimal, safe formatter for model output: paragraphs, bullet and numbered
@@ -8,6 +7,8 @@ import React from 'react';
  * Doc number to {filename}, so a chip reads "lecture-3.pdf · p. 3".
  * Builds React elements only, so model text can never inject HTML.
  */
+import { Fragment } from 'react';
+
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[Doc\s*\d+(?:\s*,\s*Pages?\s*[\d,\s–-]+)?\]|\[Pages?\s+[\d,\s–-]+\])/gi;
 const DOC_CITE = /^\[Doc\s*(\d+)(?:\s*,\s*Pages?\s*([\d,\s–-]+))?\]$/i;
 const PAGE_CITE = /^\[Pages?\s+([\d,\s–-]+)\]$/i;
@@ -53,7 +54,7 @@ const renderInline = (text, keyPrefix, legend) =>
     if (pageOnly) {
       return <Chip key={key} label={`p. ${pageOnly[1].trim()}`} title="Source page in your document" />;
     }
-    return <React.Fragment key={key}>{part}</React.Fragment>;
+    return <Fragment key={key}>{part}</Fragment>;
   });
 
 const BULLET = /^\s*[-*•]\s+/;

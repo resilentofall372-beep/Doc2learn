@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authAPI, errorMessage } from '../services/api';
 import { storage } from '../services/storage';
 import { STORAGE_KEYS } from '../utils/constants';

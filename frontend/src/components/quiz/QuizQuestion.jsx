@@ -1,4 +1,3 @@
-import React from 'react';
 
 const QuizQuestion = ({ question, selectedAnswer, onAnswerSelect }) => {
   if (!question) return null;

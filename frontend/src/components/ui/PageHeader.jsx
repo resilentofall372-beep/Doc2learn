@@ -1,4 +1,3 @@
-import React from 'react';
 
 const PageHeader = ({ title, description, actions, eyebrow }) => (
   <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

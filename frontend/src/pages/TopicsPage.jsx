@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, FilePlus, Layers, ListChecks, ListTree, Merge, Pencil, Plus, RotateCw, Sparkles, Trash2 } from 'lucide-react';
-import { errorMessage, topicsAPI } from '../services/api';
+import { topicsAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
+import { useTask } from '../hooks/useTask';
+import StaleNotice from '../components/projects/StaleNotice';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import EmptyState from '../components/ui/EmptyState';
 import LoadingSpinner, { PageLoader } from '../components/common/LoadingSpinner';
@@ -126,6 +128,7 @@ const TopicEditor = ({ draft, index, count, onChange, onMove, onMerge, onRemove 
 
 const Outline = ({ projectId, documents, addDocuments }) => {
   const { addNotification } = useApp();
+  const run = useTask();
   const [state, setState] = useState({ outline: null, pending: [] });
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(null); // null | 'build' | 'update' | 'rebuild' | 'save'
@@ -133,16 +136,14 @@ const Outline = ({ projectId, documents, addDocuments }) => {
 
   const apply = (data) => setState({ outline: data.outline, pending: data.pending_documents || [] });
 
+  // No spinner on reloads: only the first load shows one.
   const load = useCallback(async () => {
-    try {
-      const res = await topicsAPI.get(projectId);
-      setState({ outline: res.data.outline, pending: res.data.pending_documents || [] });
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not load topics', message: errorMessage(error) });
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, addNotification]);
+    await run('Could not load topics', async () => {
+      const { data } = await topicsAPI.get(projectId);
+      setState({ outline: data.outline, pending: data.pending_documents || [] });
+    });
+    setLoading(false);
+  }, [projectId, run]);
 
   // Reload when documents are added or removed, so "new documents" stays accurate.
   useEffect(() => {
@@ -152,15 +153,11 @@ const Outline = ({ projectId, documents, addDocuments }) => {
   const build = async (mode) => {
     if (mode === 'rebuild' && !window.confirm('Rebuild the outline from every document? Your edits are replaced, and quizzes and flashcards made for the old topics lose their topic labels.')) return;
     setWorking(mode === 'rebuild' ? 'rebuild' : state.outline ? 'update' : 'build');
-    try {
-      const res = await topicsAPI.build(projectId, mode);
-      apply(res.data);
+    await run('Could not build the outline', async () => {
+      apply((await topicsAPI.build(projectId, mode)).data);
       setDrafts(null);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not build the outline', message: errorMessage(error) });
-    } finally {
-      setWorking(null);
-    }
+    });
+    setWorking(null);
   };
 
   const save = async () => {
@@ -170,16 +167,12 @@ const Outline = ({ projectId, documents, addDocuments }) => {
       return;
     }
     setWorking('save');
-    try {
-      const res = await topicsAPI.save(projectId, topics);
-      apply(res.data);
+    await run('Could not save the outline', async () => {
+      apply((await topicsAPI.save(projectId, topics)).data);
       setDrafts(null);
       addNotification({ type: 'success', title: 'Outline saved' });
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not save the outline', message: errorMessage(error) });
-    } finally {
-      setWorking(null);
-    }
+    });
+    setWorking(null);
   };
 
   const changeDraft = (i, patch) => setDrafts((prev) => prev.map((d, j) => (j === i ? { ...d, ...patch } : d)));
@@ -226,19 +219,16 @@ const Outline = ({ projectId, documents, addDocuments }) => {
   return (
     <div className="space-y-6">
       {pending.length > 0 && !editing && (
-        <div className="alert alert-info flex-col sm:flex-row sm:items-center">
-          <FilePlus className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-zinc-900 dark:text-zinc-100">
-              {pending.length === 1 ? '1 new document is' : `${pending.length} new documents are`} not in the outline yet
-            </p>
-            <p className="muted mt-0.5 truncate text-xs">{pending.map((d) => d.filename).join(', ')}</p>
-          </div>
-          <button type="button" onClick={() => build('update')} disabled={Boolean(working)} className="btn btn-primary btn-sm flex-shrink-0">
-            {working === 'update' ? <LoadingSpinner size="small" /> : <Plus className="h-3.5 w-3.5" />}
-            {working === 'update' ? 'Adding…' : 'Add to outline'}
-          </button>
-        </div>
+        <StaleNotice
+          documents={pending}
+          title={`${pending.length === 1 ? '1 new document is' : `${pending.length} new documents are`} not in the outline yet`}
+          action={
+            <button type="button" onClick={() => build('update')} disabled={Boolean(working)} className="btn btn-primary btn-sm flex-shrink-0">
+              {working === 'update' ? <LoadingSpinner size="small" /> : <Plus className="h-3.5 w-3.5" />}
+              {working === 'update' ? 'Adding…' : 'Add to outline'}
+            </button>
+          }
+        />
       )}
 
       <section className="card">

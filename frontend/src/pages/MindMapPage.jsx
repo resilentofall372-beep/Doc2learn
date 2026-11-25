@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowRight, BookOpen, Layers, Lightbulb, ListChecks, MousePointerClick, Network, RefreshCw, Repeat } from 'lucide-react';
 import { assistantAPI, errorMessage, mindmapAPI, projectAPI } from '../services/api';
-import { useApp } from '../contexts/AppContext';
+import { useTask } from '../hooks/useTask';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
 import MindMapCanvas, { normaliseMap } from '../components/mindmap/MindMapCanvas';
@@ -201,7 +201,7 @@ const DetailPanel = ({ projectId, documentId, map, selected, onSelect, progressF
 
 // --------------------------------------------------------------------------- page
 const ConceptMap = ({ projectId, documents }) => {
-  const { addNotification } = useApp();
+  const run = useTask();
   const [params, setParams] = useSearchParams();
   const wanted = params.get('document');
   const documentId = documents.some((d) => d._id === wanted) ? wanted : '';
@@ -230,37 +230,26 @@ const ConceptMap = ({ projectId, documents }) => {
 
   const setDocumentId = (id) => setParams(id ? { document: id } : {}, { replace: true });
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(() => {
     setSelected(null);
-    try {
+    return run('Could not load concept map', async () => {
       const res = await mindmapAPI.getMindmap(projectId, documentId || null);
       setMindmap(res.data.mindmap);
       setGeneratedAt(res.data.generated_at || null);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not load concept map', message: errorMessage(error) });
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, documentId, addNotification]);
+    }, setLoading);
+  }, [projectId, documentId, run]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const generate = async () => {
-    setGenerating(true);
-    try {
+  const generate = () =>
+    run('Could not generate concept map', async () => {
       const res = await mindmapAPI.generate({ projectId, documentId: documentId || null });
       setMindmap(res.data.mindmap);
       setGeneratedAt(res.data.generated_at || new Date().toISOString());
       setSelected(null);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not generate concept map', message: errorMessage(error) });
-    } finally {
-      setGenerating(false);
-    }
-  };
+    }, setGenerating);
 
   const map = useMemo(() => (mindmap ? normaliseMap(mindmap) : null), [mindmap]);
 

@@ -1,4 +1,3 @@
-import React from 'react';
 
 const TONES = {
   neutral: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',

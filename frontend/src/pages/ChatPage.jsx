@@ -1,4 +1,3 @@
-import React from 'react';
 import { useParams } from 'react-router-dom';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ChatInterface from '../components/assistant/ChatInterface';

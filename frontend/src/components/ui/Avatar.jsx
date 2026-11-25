@@ -1,4 +1,3 @@
-import React from 'react';
 
 // Avatar colours a player can pick. Stored as a short key ("c0".."c7") so the backend stays tiny.
 export const AVATAR_COLORS = [

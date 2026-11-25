@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronsDownUp, ChevronsUpDown, Maximize2, Minus, Plus, Search, X } from 'lucide-react';
 import { STATUS } from '../../utils/progress';
 

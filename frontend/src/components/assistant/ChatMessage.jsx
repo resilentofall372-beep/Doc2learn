@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertCircle, BookOpen } from 'lucide-react';
 import RichText, { sourceLabel } from '../ui/RichText';
 

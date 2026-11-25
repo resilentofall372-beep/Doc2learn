@@ -1,4 +1,3 @@
-import React from 'react';
 
 const QuizProgress = ({ current, total }) => (
   <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={current}>

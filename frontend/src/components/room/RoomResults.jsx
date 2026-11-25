@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Copy, Download, Plus, Trophy } from 'lucide-react';
 import Avatar from '../ui/Avatar';

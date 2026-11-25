@@ -1,4 +1,3 @@
-import React from 'react';
 
 const Face = ({ label, children, footer, back }) => (
   <div

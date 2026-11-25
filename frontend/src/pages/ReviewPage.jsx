@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { CircleCheck, Repeat } from 'lucide-react';
 import { errorMessage, flashcardsAPI } from '../services/api';

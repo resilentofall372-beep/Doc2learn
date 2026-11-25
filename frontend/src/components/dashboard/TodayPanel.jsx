@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CalendarDays, Repeat, Sun, Target } from 'lucide-react';
 import { statsAPI } from '../../services/api';

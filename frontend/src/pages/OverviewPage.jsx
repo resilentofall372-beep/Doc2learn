@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -15,8 +15,9 @@ import {
   Sparkles,
   Target,
 } from 'lucide-react';
-import { assistantAPI, errorMessage, projectAPI } from '../services/api';
+import { assistantAPI, projectAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
+import { useTask } from '../hooks/useTask';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import StatsCard from '../components/dashboard/StatsCard';
 import EmptyState from '../components/ui/EmptyState';
@@ -121,31 +122,19 @@ const TopicProgress = ({ topic, index, projectId }) => {
 // --------------------------------------------------------------------------- study plan
 const StudyPlan = ({ projectId, plan, hasOutline, onChange }) => {
   const { addNotification } = useApp();
+  const run = useTask();
   const [days, setDays] = useState(7);
   const [working, setWorking] = useState(false);
   const [showAll, setShowAll] = useState(false);
 
-  const make = async () => {
-    setWorking(true);
-    try {
-      const res = await assistantAPI.createStudyPlan(projectId, null, [], days);
-      onChange(res.data.saved_plan);
+  const make = () =>
+    run('Could not make a plan', async () => {
+      onChange((await assistantAPI.createStudyPlan(projectId, null, [], days)).data.saved_plan);
       addNotification({ type: 'success', title: 'Study plan ready', message: `${days} days, built around your progress.` });
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not make a plan', message: errorMessage(error) });
-    } finally {
-      setWorking(false);
-    }
-  };
+    }, setWorking);
 
-  const toggleDay = async (day, done) => {
-    try {
-      const res = await assistantAPI.markPlanDay(projectId, day, done);
-      onChange(res.data.saved_plan);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not update the plan', message: errorMessage(error) });
-    }
-  };
+  const toggleDay = (day, done) =>
+    run('Could not update the plan', async () => onChange((await assistantAPI.markPlanDay(projectId, day, done)).data.saved_plan));
 
   const maker = (
     <div className="flex items-center gap-2">
@@ -253,17 +242,13 @@ const StudyPlan = ({ projectId, plan, hasOutline, onChange }) => {
 
 // --------------------------------------------------------------------------- page
 const Overview = ({ projectId, documents, addDocuments }) => {
-  const { addNotification } = useApp();
+  const run = useTask();
   const [data, setData] = useState(null);
 
-  const load = useCallback(async () => {
-    try {
-      const res = await projectAPI.overview(projectId);
-      setData(res.data);
-    } catch (error) {
-      addNotification({ type: 'error', title: 'Could not load your progress', message: errorMessage(error) });
-    }
-  }, [projectId, addNotification]);
+  const load = useCallback(
+    () => run('Could not load your progress', async () => setData((await projectAPI.overview(projectId)).data)),
+    [projectId, run]
+  );
 
   // Documents added from the header change the next step, so reload with them.
   useEffect(() => {

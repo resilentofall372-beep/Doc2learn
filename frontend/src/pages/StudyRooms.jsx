@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Radio, Users } from 'lucide-react';
 import { errorMessage, roomAPI } from '../services/api';

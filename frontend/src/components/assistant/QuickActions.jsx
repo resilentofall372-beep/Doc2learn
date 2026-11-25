@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Check, ChevronRight, Copy, FileText, History, Lightbulb, PenLine, RotateCw, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { assistantAPI, errorMessage } from '../../services/api';

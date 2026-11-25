@@ -1,4 +1,3 @@
-import React from 'react';
 
 const EmptyState = ({ icon: Icon, title, description, action, className = '' }) => (
   <div className={`flex flex-col items-center px-6 py-14 text-center ${className}`}>
