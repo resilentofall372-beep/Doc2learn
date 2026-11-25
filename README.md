@@ -2,6 +2,8 @@
 
 Turn your own study material into a tutor that stays honest.
 
+**Live:** https://doc2learn-sigma.vercel.app (frontend on Vercel, API on Render, data in MongoDB Atlas). The free API sleeps when idle, so the first request after a while can take up to a minute.
+
 Create a **project** for each subject, upload your lecture notes, chapters or slides into it (several files at once, or pasted text), and Doc2Learn gives you:
 
 - **A topic outline** that splits the project into topics in learning order. You can edit it, and it grows as you add documents. Every quiz question and flashcard is labelled with its topic, and each topic has its own quiz and deck.
@@ -52,7 +54,7 @@ React (Vite, Tailwind)  ──/api──▶  Flask API  ──▶  MongoDB
 - Passwords are hashed with **bcrypt**; plain passwords are never stored.
 - Signing in returns a **JWT** (HS256, signed with `SECRET_KEY` from `.env`) that lasts 24 hours. The browser sends it as `Authorization: Bearer <token>`, and the server checks it on every protected request. The user id always comes from the token, never from the request body.
 - **Logging out revokes the session on the server.** Each user has a `token_version`; logging out increments it, so every token issued before that stops working on every device.
-- Ownership checks live in one place, `backend/app/access.py`.
+- Ownership checks live in one place, `backend/app/access.py` (`owned_project`, `owned_document`, `resolve_scope`).
 
 ## Database
 
@@ -163,38 +165,50 @@ Browser ─▶ Vercel (React build)
 3. Deploy, and note the address (e.g. `https://doc2learn.vercel.app`).
 
 **4. Connect them**
-On Render, set `CORS_ORIGINS` to your Vercel address (e.g. `https://doc2learn.vercel.app`; separate several with commas) and save, which redeploys. Leave `PUBLIC_URL` unset: invite links then use the Vercel address automatically.
+On Render, set `CORS_ORIGINS` to your Vercel address (e.g. `https://doc2learn.vercel.app`; separate several with commas) and choose *Save, rebuild and deploy*. The key must be spelled exactly `CORS_ORIGINS` (plural); a trailing slash or quotes in the value are ignored. Leave `PUBLIC_URL` unset: invite links then use the Vercel address automatically.
+
+If sign-in fails with *"blocked by CORS policy … No 'Access-Control-Allow-Origin' header"*, the API doesn't have your Vercel address in `CORS_ORIGINS`: check the key's spelling on Render and redeploy.
 
 Notes:
 - `VITE_*` values are baked in at build time. After changing them on Vercel, redeploy.
-- Render's free service sleeps after 15 minutes idle, so the first request can take about a minute. Open `/api/health` before a demo to wake it.
+- Render's free service sleeps after 15 minutes idle, so the first request can take about a minute. Open `/api/health` before a demo to wake it; it also reports whether the database and the model are configured.
 - If Render reports running out of memory, set `EMBEDDINGS_ENABLED=false`. Search then falls back to BM25 keyword retrieval.
 - Vercel preview deployments get different URLs. Add them to `CORS_ORIGINS` if you want them to work too.
 
 ## Tests
 
 ```bash
-cd backend && python -m pytest
+cd backend && python -m pytest          # API
+cd frontend && npm run lint && npm run build   # frontend
 ```
 
-The suite needs no database or API key. It uses an in-memory MongoDB and a stubbed model, and covers sign-up, login and logout, project privacy, project-wide retrieval, quiz grading, the tutor, the data migration, and a full multiplayer room over Socket.IO.
+The backend suite needs no database or API key. It uses an in-memory MongoDB and a stubbed model, and covers sign-up, login and logout, project privacy, project-wide retrieval, quiz grading, the tutor, the data migration, and a full multiplayer room over Socket.IO.
 
 ## Project layout
 
 ```
 backend/
   app/
-    access.py      ownership checks (projects, documents)
+    __init__.py    app factory: CORS, Socket.IO, blueprints
+    config.py      settings from environment variables
+    access.py      ownership checks and project/document scope
+    auth.py        JWT sessions
     migrations.py  start-up data migrations
-    routes/        auth, projects, documents, topics, quiz, flashcards, mindmap, assistant, rooms, stats
-    services/      llm, extract, retrieval, generation, rooms
     sockets.py     live room events
+    routes/        auth, projects, documents, topics, quiz, flashcards, mindmap, assistant, rooms, stats
+    services/      llm (model calls + fallback), extract, retrieval, generation (all prompts),
+                   progress (mastery), srs (spaced repetition), rooms
   tests/
+  Dockerfile       the image Render builds
 frontend/
-  src/pages        Home, Login, Signup, Projects, ProjectDocuments, Topics, Chat, Quiz, Flashcards, MindMap, rooms
-  src/components   projects/, document/, assistant/, quiz/, flashcards/, mindmap/, room/, ui/, common/
-  src/services/api.js
-render.yaml          Render service for the API
+  src/pages        one file per screen (Projects, Overview, Topics, Quiz, Flashcards, Review, MindMap, Chat, rooms, auth)
+  src/components   projects/, document/, assistant/, quiz/, flashcards/, mindmap/, room/, dashboard/, ui/, common/
+  src/hooks        useTask (run a request, show an error notification if it fails)
+  src/contexts     auth, notifications, theme, socket
+  src/services     api.js (every API call), socket.js, storage.js
+  vercel.json      SPA routing on Vercel
+render.yaml        Render service for the API
+.env.example       settings template (copy to backend/.env)
 ```
 
 ## Roadmap
