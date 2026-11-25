@@ -1,8 +1,8 @@
 """Socket.IO events for live quiz rooms.
 
-Client -> server: join_room, leave_room, start_quiz, submit_answer, next_question
-Server -> room:   participant_joined, participant_left, room_closed, quiz_started,
-                  answer_submitted, leaderboard_update, next_question, quiz_completed
+Client -> server: join_room, leave_room, kick_player, start_quiz, submit_answer, next_question
+Server -> room:   participant_joined, participant_left, participant_removed, room_closed,
+                  quiz_started, answer_submitted, leaderboard_update, next_question, quiz_completed
 Server -> caller: error, joined
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _auth(data: dict) -> tuple[dict, dict]:
 
 
 def _host_only(room: dict, participant: dict) -> None:
-    if participant["id"] != room["host_id"]:
+    if not participant.get("is_host"):
         raise ApiError("Only the host can do that", 403)
 
 
@@ -81,7 +81,7 @@ def on_leave(data):
     sio_leave(room["room_id"])
     room = rooms.remove_participant(room, participant["id"])
     payload = rooms.public_room(room)
-    if participant["is_host"]:
+    if participant.get("is_host"):
         emit("room_closed", {"participants": payload["participants"], "message": "The host closed the room"}, to=room["room_id"])
     else:
         emit(
@@ -92,10 +92,26 @@ def on_leave(data):
 
 
 @_handler
+def on_kick(data):
+    """Host removes a player: their token stops working and their screen is told why."""
+    room, participant = _auth(data)
+    _host_only(room, participant)
+    target = next((p for p in rooms.players(room) if p["id"] == str(data.get("target_id", ""))), None)
+    if target is None:
+        raise ApiError("That player is not in this room", 404)
+    room = rooms.remove_participant(room, target["id"])
+    emit(
+        "participant_removed",
+        {"participant_id": target["id"], "participants": rooms.public_room(room)["participants"], "message": f"{target['name']} was removed"},
+        to=room["room_id"],
+    )
+
+
+@_handler
 def on_start(data):
     room, participant = _auth(data)
     _host_only(room, participant)
-    room = rooms.start_quiz(room, data.get("questions") or [])
+    room = rooms.start_quiz(room)  # questions come from the server, never from the client
     emit("quiz_started", _question_payload(room), to=room["room_id"])
 
 
@@ -111,7 +127,7 @@ def on_answer(data):
         raise ApiError("selected_answer must be A, B, C or D")
 
     answer, room = rooms.record_answer(room, participant, question_index, selected)
-    answered = sum(1 for p in room["participants"] if any(a["question_index"] == question_index for a in p["answers"]))
+    answered = sum(1 for p in rooms.players(room) if any(a["question_index"] == question_index for a in p["answers"]))
     emit("answer_result", answer)  # only the answering client learns if it was correct
     emit(
         "answer_submitted",
@@ -119,7 +135,7 @@ def on_answer(data):
             "participant_id": participant["id"],
             "question_index": question_index,
             "answers_count": answered,
-            "total_participants": len(room["participants"]),
+            "total_participants": len(rooms.players(room)),
         },
         to=room["room_id"],
     )
@@ -154,6 +170,7 @@ def register(sio) -> None:
     sio.on_event("connect", on_connect)
     sio.on_event("join_room", on_join)
     sio.on_event("leave_room", on_leave)
+    sio.on_event("kick_player", on_kick)
     sio.on_event("start_quiz", on_start)
     sio.on_event("submit_answer", on_answer)
     sio.on_event("next_question", on_next)

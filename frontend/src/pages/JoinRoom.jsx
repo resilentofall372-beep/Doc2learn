@@ -20,8 +20,13 @@ const JoinRoom = () => {
   const [joinError, setJoinError] = useState(null);
   const [name, setName] = useState(user?.name || '');
   const [color, setColor] = useState(Math.floor(Math.random() * AVATAR_COLORS.length));
+  const [code, setCode] = useState('');
 
   const load = useCallback(async () => {
+    if (!roomCode) {
+      setLoading(false); // no code in the link: show the code box
+      return;
+    }
     try {
       const res = await roomAPI.getRoomByCode(roomCode);
       setRoom(res.data.room);
@@ -59,20 +64,49 @@ const JoinRoom = () => {
 
   if (loading) return <PageLoader />;
 
+  // /join without a code: one box for the six characters the host shared.
+  if (!roomCode) {
+    return (
+      <form
+        className="card mx-auto max-w-md space-y-4 px-6 py-8 text-center"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (code.length === 6) navigate(`/join/${code}`);
+        }}
+      >
+        <h1 className="text-xl font-semibold tracking-tight">Join a live quiz</h1>
+        <p className="muted text-sm">Enter the code from the host. No account needed.</p>
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+          maxLength={6}
+          autoFocus
+          placeholder="ABC123"
+          aria-label="Room code"
+          className="input text-center font-mono text-lg uppercase tracking-[0.3em]"
+        />
+        <button type="submit" className="btn btn-primary w-full" disabled={code.length !== 6}>
+          Continue
+        </button>
+      </form>
+    );
+  }
+
   if (error || !room) {
     return (
       <div className="card mx-auto max-w-md">
         <EmptyState
           icon={ListChecks}
-          title="Quiz not found"
+          title="Can't join this quiz"
           description={error}
-          action={<Link to="/study-rooms" className="btn btn-secondary">Browse open quizzes</Link>}
+          action={<Link to="/join" className="btn btn-secondary">Enter another code</Link>}
         />
       </div>
     );
   }
 
   const canJoin = !room.is_full && room.quiz_state === 'lobby';
+  const ownRoom = Boolean(user && room.host_id === user.user_id);
   const facts = [
     { icon: ListChecks, label: `${room.num_questions} questions` },
     { icon: Clock, label: `${room.time_per_question}s each` },
@@ -103,7 +137,13 @@ const JoinRoom = () => {
           </div>
         </div>
 
-        {canJoin ? (
+        {ownRoom ? (
+          <div className="px-6 py-8 text-center">
+            <p className="text-sm font-semibold">You&apos;re hosting this quiz</p>
+            <p className="muted mt-1 text-sm">Hosts run the game from the room page; they don&apos;t join as a player.</p>
+            <Link to={`/room/${room.room_id}`} className="btn btn-primary mt-5">Open your room</Link>
+          </div>
+        ) : canJoin ? (
           <form onSubmit={join} className="space-y-5 px-6 py-6">
             {joinError && <div className="alert alert-danger">{joinError}</div>}
             <div>
@@ -137,7 +177,7 @@ const JoinRoom = () => {
           <div className="px-6 py-8 text-center">
             <p className="text-sm font-semibold">{room.is_full ? 'This quiz is full' : 'This quiz has already started'}</p>
             <p className="muted mt-1 text-sm">Ask the host to start a new one.</p>
-            <Link to="/study-rooms" className="btn btn-secondary mt-5">Browse open quizzes</Link>
+            <Link to="/join" className="btn btn-secondary mt-5">Enter another code</Link>
           </div>
         )}
       </div>

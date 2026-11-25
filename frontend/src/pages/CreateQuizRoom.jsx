@@ -166,10 +166,10 @@ const CreateQuizRoom = () => {
         <Section title="Players">
           <div>
             <div className="mb-1.5 flex justify-between text-sm">
-              <label htmlFor="max-players" className="font-medium text-zinc-700 dark:text-zinc-300">Maximum players</label>
+              <label htmlFor="max-players" className="font-medium text-zinc-700 dark:text-zinc-300">Maximum players <span className="muted font-normal">(not counting you)</span></label>
               <span className="font-medium tabular-nums">{maxParticipants}</span>
             </div>
-            <input id="max-players" type="range" min="2" max="100" value={maxParticipants} onChange={(e) => setMaxParticipants(Number(e.target.value))} className="w-full" />
+            <input id="max-players" type="range" min="1" max="100" value={maxParticipants} onChange={(e) => setMaxParticipants(Number(e.target.value))} className="w-full" />
           </div>
         </Section>
 

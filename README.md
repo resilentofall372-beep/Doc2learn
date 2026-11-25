@@ -14,7 +14,7 @@ Create a **project** for each subject, upload your lecture notes, chapters or sl
 - **Quizzes** at three difficulty levels, across the whole project or one document, graded on the server with an explanation and source for every question.
 - **Flashcards** and a **concept map**, for the whole project or one document.
 - **Summaries, concept explanations, practice problems and a study plan** that weights the areas you have struggled with in past quizzes.
-- **Live quiz rooms.** Host a Kahoot-style game from any project; friends join with a six-character code, no account needed.
+- **Live quiz rooms.** Host a Kahoot-style game from any project; friends join with a six-character code or link, no account needed. The host runs the game (and can remove players) but doesn't play. Rooms are never listed publicly, the invite link expires after 2 hours (the host can make a new one), and expiry never interrupts people already playing.
 - **Real progress stats** per project: quizzes taken, average score, time spent, and the documents you are weakest on.
 
 ## Why it is built this way
@@ -28,7 +28,7 @@ Learning tools that use language models can be confidently wrong, and students a
 | Overconfidence | The tutor states when the documents do not contain an answer, and each chat reply is labelled by how well it is grounded. |
 | Silent failure | No fake fallback content. If the model is unavailable the user sees a clear error, never placeholder questions presented as real. |
 | Privacy | Projects are private to their owner. Every route checks ownership on the server; another user's project is reported as "not found". |
-| Fairness in live rooms | Correct answers never leave the server until a question closes, and timing is measured on the server, not the client. |
+| Fairness in live rooms | Questions are generated and stored on the server, so correct answers never reach any browser (host included) until the quiz ends. Timing is measured on the server, names are unique per room, and only invited people can join. |
 
 These are deliberate starting points for studying how learners calibrate trust in AI tutors, for example whether citations change how often students verify an answer, or whether confidence labels reduce over-reliance.
 
@@ -47,7 +47,7 @@ React (Vite, Tailwind)  ──/api──▶  Flask API  ──▶  MongoDB
 - **Extraction:** PyMuPDF for PDF (with Tesseract OCR for scanned pages), python-docx, python-pptx, and OCR for images. Page boundaries are kept so chunks can cite pages.
 - **Retrieval:** sentence-aware overlapping chunks stored in MongoDB with `BAAI/bge-small-en-v1.5` embeddings, searched across a whole project or one document. Excerpts are labelled `[Doc 2, Page 3]`; the API returns a legend so the interface shows the real file name.
 - **Generation:** every prompt lives in `backend/app/services/generation.py`, and every model call goes through `backend/app/services/llm.py`. Model output is parsed as JSON and validated before it reaches the browser.
-- **Live rooms:** room state is persisted in MongoDB. Each participant gets a private token that every socket event must present.
+- **Live rooms:** room state is persisted in MongoDB. The host and each player get a private token that every socket event must present. Only the join step checks the invite's expiry; rooms with no activity for 6 hours are closed.
 
 ### Accounts and sessions (JWT)
 
@@ -72,7 +72,7 @@ MongoDB, database `doc2learn`. Every row a user owns carries `user_id`, and proj
 | `card_reviews` | one row per flashcard a learner has rated: a copy of the card, its topic, and its schedule (`ease`, `interval_days`, `due_at`) |
 | `study_plans` | the latest whole-project study plan, and which days are done |
 | `chat_sessions` | one tutor conversation per user and project |
-| `rooms` | live quiz rooms, their players and questions |
+| `rooms` | live quiz rooms: host, players, stored questions, invite code and its expiry |
 
 ```
 user ─┬─< project ─┬─< document ─< chunk

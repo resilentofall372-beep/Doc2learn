@@ -74,6 +74,7 @@ function App() {
               <Route path="/create-quiz-room" element={protectedPage(<CreateQuizRoom />)} />
 
               {/* Guests can join a live quiz by code without an account. */}
+              <Route path="/join" element={<Layout><JoinRoom /></Layout>} />
               <Route path="/join/:roomCode" element={<Layout><JoinRoom /></Layout>} />
               <Route
                 path="/room/:id"

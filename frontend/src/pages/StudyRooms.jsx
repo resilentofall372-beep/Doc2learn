@@ -27,15 +27,13 @@ const StudyRooms = () => {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
   }, [load]);
 
   return (
     <div>
       <PageHeader
         title="Live quizzes"
-        description="Host a timed quiz from one of your documents, or join one with a code. Faster correct answers score more."
+        description="Host a timed quiz from one of your projects and share its code or link. Only people you send it to can join."
         actions={
           <Link to="/create-quiz-room" className="btn btn-primary">
             <Plus className="h-4 w-4" />
@@ -72,13 +70,13 @@ const StudyRooms = () => {
 
       <section className="card mt-6">
         <div className="card-header">
-          <h2 className="card-title">Open lobbies</h2>
-          <span className="muted text-xs">Updates every 10 seconds</span>
+          <h2 className="card-title">Your rooms</h2>
+          <span className="muted text-xs">Rooms you host that are still open</span>
         </div>
         {loading ? (
           <PageLoader />
         ) : rooms.length === 0 ? (
-          <EmptyState icon={Radio} title="No open lobbies" description="When someone hosts a quiz, it appears here until it starts." />
+          <EmptyState icon={Radio} title="No open rooms" description="Host a quiz and it shows here until you close it." />
         ) : (
           <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {rooms.map((room) => (
@@ -89,9 +87,8 @@ const StudyRooms = () => {
                     <span className="badge badge-neutral font-mono">{room.room_code}</span>
                   </div>
                   <p className="muted mt-0.5 truncate text-xs">
-                    Hosted by {room.host_name}
-                    {room.document_name || room.project_name ? ` · ${room.document_name || room.project_name}` : ''} · {room.num_questions} questions · {room.time_per_question}s each ·{' '}
-                    <span className="capitalize">{room.difficulty}</span>
+                    {room.document_name || room.project_name} · {room.num_questions} questions · {room.time_per_question}s each ·{' '}
+                    <span className="capitalize">{room.quiz_state === 'lobby' ? 'waiting for players' : room.quiz_state.replace('_', ' ')}</span>
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -99,14 +96,9 @@ const StudyRooms = () => {
                     <Users className="h-3.5 w-3.5" />
                     {room.participants_count}/{room.max_participants}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/join/${room.room_code}`)}
-                    disabled={room.is_full}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    {room.is_full ? 'Full' : 'Join'}
-                    {!room.is_full && <ArrowRight className="h-3.5 w-3.5" />}
+                  <button type="button" onClick={() => navigate(`/room/${room.room_id}`)} className="btn btn-secondary btn-sm">
+                    Open
+                    <ArrowRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </li>

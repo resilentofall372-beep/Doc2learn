@@ -143,8 +143,13 @@ export const statsAPI = {
 export const roomAPI = {
   create: (data) => api.post('/room/create', data),
   join: (data) => api.post('/room/join', data),
+  /** Your own open rooms (rooms are never listed to anyone else). */
   getRooms: () => api.get('/room/rooms'),
   getRoom: (roomId) => api.get(`/room/${roomId}`),
   getRoomByCode: (roomCode) => api.get(`/room/code/${roomCode}`),
   leave: (data) => api.post('/room/leave', data),
+  /** Host only: questions are generated and kept on the server. */
+  generateQuestions: (roomId, credentials) => api.post(`/room/${roomId}/questions`, credentials),
+  /** Host only: replace the invite code; people already inside stay. */
+  newCode: (roomId, credentials) => api.post(`/room/${roomId}/new-code`, credentials),
 };
