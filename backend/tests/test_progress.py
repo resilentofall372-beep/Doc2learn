@@ -80,13 +80,13 @@ def test_reviews_mastery_plan_and_today(app, client, document):
     step = _overview(client, headers, project_id)["next_step"]
     assert step["kind"] == "start_topic" and step["topic_id"] == light["id"]
 
-    # Quiz on "Calvin cycle": answer 1 of 2 right -> 50% accuracy, but only 2 of 5 pieces of
-    # evidence, so 20% mastery; learning, and the weakest topic.
+    # Quiz on "Calvin cycle": answer 1 of 2 right -> 50% accuracy, but with the two-answer prior
+    # only 1 / (2 + 2) = 25% mastery; learning, and the weakest topic.
     quiz = client.post("/api/document/generate-quiz", json={"project_id": project_id, "topic_id": calvin["id"]}, headers=headers).get_json()
     client.post("/api/quiz/submit", json={"quiz_id": quiz["quiz_id"], "answers": {"0": "A", "1": "C"}}, headers=headers)
     ov = _overview(client, headers, project_id)
     row = {t["id"]: t for t in ov["topics"]}
-    assert row[calvin["id"]]["accuracy"] == 50 and row[calvin["id"]]["mastery"] == 20
+    assert row[calvin["id"]]["accuracy"] == 50 and row[calvin["id"]]["mastery"] == 25
     assert row[calvin["id"]]["status"] == "learning"
     assert row[light["id"]]["status"] == "not_started"
     assert ov["next_step"]["kind"] == "strengthen" and ov["next_step"]["topic_id"] == calvin["id"]

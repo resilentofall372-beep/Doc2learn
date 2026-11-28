@@ -8,7 +8,7 @@ const ChatPage = () => {
   return (
     <ProjectLayout>
       {({ project, documents }) => (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
           <ChatInterface projectId={projectId} project={project} documents={documents} />
           <QuickActions projectId={projectId} documents={documents} />
         </div>

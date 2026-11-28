@@ -171,11 +171,72 @@ def explanations():
 @bp.post("/practice")
 @require_auth
 def practice():
+    """Open written problems. With `topic_id` (an outline topic) they are about that topic, and
+    graded answers to them count towards its mastery."""
     data = request.get_json(silent=True) or {}
     scope = resolve_scope(data)
-    topic = clean_str(data.get("topic"), 200) or "general"
+    outline_topic = find_topic(scope["project_id"], g.user_id, clean_str(data.get("topic_id"), 64) or None)
+    topic = outline_topic["title"] if outline_topic else clean_str(data.get("topic"), 200) or "general"
     count = clamp(data.get("num_problems"), 1, 10, 5)
-    return jsonify({"success": True, **generation.practice_problems(scope_ids(scope), topic, count)})
+    result = generation.practice_problems(scope_ids(scope), topic, count)
+    return jsonify({"success": True, **result, "topic_id": outline_topic["id"] if outline_topic else None})
+
+
+@bp.post("/practice/grade")
+@require_auth
+def grade_practice():
+    """Grade one written answer against the documents.
+
+    Body: {project_id, document_id?, question, model_answer, answer, topic_id?, attempt_id?}.
+    The result is saved as a "written" attempt: with a topic it counts towards that topic's
+    mastery (right = 1, partly right = 0.5, wrong = 0), but not as a quiz taken. Checking a
+    rewritten answer again passes the earlier `attempt_id`, which is replaced (not counted twice).
+    """
+    data = request.get_json(silent=True) or {}
+    scope = resolve_scope(data)
+    question = clean_str(data.get("question"), 1000)
+    answer = clean_str(data.get("answer"), 4000)
+    model_answer = clean_str(data.get("model_answer"), 4000)
+    if not question:
+        raise ApiError("question is required")
+    if not answer:
+        raise ApiError("Write an answer first")
+    topic = find_topic(scope["project_id"], g.user_id, clean_str(data.get("topic_id"), 64) or None)
+
+    graded = generation.grade_answer(scope_ids(scope), question, model_answer, answer)
+    credit = {"correct": 1.0, "partial": 0.5}.get(graded["verdict"], 0.0)
+    row = {
+        **scope_ids(scope),
+        "user_id": g.user_id,
+        "kind": "written",
+        "score": credit,
+        "total": 1,
+        "percentage": round(100 * credit),
+        "topic_id": topic["id"] if topic else None,
+        "results": [
+            {
+                "question": question,
+                "user_answer": answer,
+                "is_correct": graded["verdict"] == "correct",
+                "credit": credit,
+                "feedback": graded["feedback"],
+                "topic_id": topic["id"] if topic else None,
+            }
+        ],
+        "submitted_at": datetime.now(timezone.utc),
+    }
+    attempts = get_db()[Collections.QUIZ_ATTEMPTS]
+    previous = None
+    if data.get("attempt_id"):
+        previous = attempts.find_one(
+            {"_id": to_object_id(data.get("attempt_id"), "attempt id"), "user_id": g.user_id, "kind": "written"}, {"_id": 1}
+        )
+    if previous:
+        attempts.replace_one({"_id": previous["_id"]}, row)
+        attempt_id = previous["_id"]
+    else:
+        attempt_id = attempts.insert_one(row).inserted_id
+    return jsonify({"success": True, **graded, "credit": credit, "counted": bool(topic), "attempt_id": str(attempt_id)})
 
 
 @bp.post("/study-plan")
@@ -187,7 +248,7 @@ def study_plan():
     raw_areas = data.get("weak_areas") if isinstance(data.get("weak_areas"), list) else []
     weak_areas = [clean_str(a, 80) for a in raw_areas if clean_str(a, 80)][:10]
 
-    attempts_filter = {"project_id": scope["project_id"], "user_id": g.user_id}
+    attempts_filter = {"project_id": scope["project_id"], "user_id": g.user_id, "kind": {"$ne": "written"}}
     if scope["document_id"]:
         attempts_filter["document_id"] = scope["document_id"]
     attempts = list(get_db()[Collections.QUIZ_ATTEMPTS].find(attempts_filter, {"percentage": 1}))

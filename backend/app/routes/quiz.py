@@ -37,6 +37,7 @@ def submit():
                 "explanation": question.get("explanation", ""),
                 "source_document": question.get("source_document"),
                 "source_page": question.get("source_page"),
+                "source_section": question.get("source_section"),
                 "topic_id": question.get("topic_id"),
             }
         )
@@ -52,11 +53,14 @@ def submit():
         "total": total,
         "percentage": percentage,
         "difficulty": quiz.get("difficulty"),
+        "topic_id": quiz.get("topic_id"),
+        "focus": quiz.get("focus"),
         "time_spent_seconds": time_spent,
         "results": results,
         "submitted_at": datetime.now(timezone.utc),
     }
     inserted = get_db()[Collections.QUIZ_ATTEMPTS].insert_one(attempt)
+    get_db()[Collections.QUIZZES].update_one({"_id": quiz["_id"]}, {"$set": {"attempted": True}})
     return jsonify(
         {
             "success": True,
@@ -82,7 +86,7 @@ def project_attempts(project_id):
     owned_project(project_id, {"_id": 1})
     attempts = (
         get_db()[Collections.QUIZ_ATTEMPTS]
-        .find({"project_id": project_id, "user_id": g.user_id}, {"results": 0})
+        .find({"project_id": project_id, "user_id": g.user_id, "kind": {"$ne": "written"}}, {"results": 0})
         .sort("submitted_at", -1)
         .limit(50)
     )

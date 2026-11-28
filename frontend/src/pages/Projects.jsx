@@ -40,7 +40,7 @@ const CardMenu = ({ onEdit, onDelete }) => {
         <MoreHorizontal className="h-4 w-4" />
       </button>
       {open && (
-        <div className="card absolute right-0 top-9 z-10 w-36 p-1 shadow-lg">
+        <div className="card absolute right-0 top-full z-20 mt-1 w-36 p-1 shadow-lg">
           <button type="button" onClick={(e) => { e.preventDefault(); setOpen(false); onEdit(); }} className="btn btn-ghost btn-sm w-full justify-start">
             <Pencil className="h-3.5 w-3.5" /> Rename
           </button>
@@ -170,16 +170,16 @@ const Projects = () => {
                     {project.name}
                   </h2>
                 </div>
-                <CardMenu onEdit={() => setDialog({ open: true, project })} onDelete={() => remove(project)} />
               </div>
               {project.description && <p className="muted mt-3 line-clamp-2 text-sm">{project.description}</p>}
-              <div className="muted mt-auto flex items-center gap-3 pt-4 text-xs">
+              <div className="muted -mb-2 -mr-2 mt-auto flex items-center gap-3 pt-4 text-xs">
                 <span className="inline-flex items-center gap-1">
                   <FileText className="h-3.5 w-3.5" />
                   {project.document_count} {project.document_count === 1 ? 'document' : 'documents'}
                 </span>
                 <span>·</span>
-                <span>Edited {timeAgo(project.updated_at)}</span>
+                <span className="min-w-0 flex-1 truncate">Edited {timeAgo(project.updated_at)}</span>
+                <CardMenu onEdit={() => setDialog({ open: true, project })} onDelete={() => remove(project)} />
               </div>
             </Link>
           ))}

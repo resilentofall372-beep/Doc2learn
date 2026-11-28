@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowRight, BookOpen, Layers, Lightbulb, ListChecks, MousePointerClick, Network, RefreshCw, Repeat } from 'lucide-react';
+import { ArrowRight, BookOpen, Layers, Lightbulb, ListChecks, MousePointerClick, Network, RefreshCw, Repeat, X } from 'lucide-react';
 import { assistantAPI, errorMessage, mindmapAPI, projectAPI } from '../services/api';
 import { useTask } from '../hooks/useTask';
 import ProjectLayout from '../components/projects/ProjectLayout';
@@ -316,7 +316,8 @@ const ConceptMap = ({ projectId, documents }) => {
         </div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      {/* Details sit beside the map, so clicking a node visibly opens them; on narrow screens they slide in. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <section className="card overflow-hidden">
           <div className="card-header py-3">
             <div className="min-w-0">
@@ -334,7 +335,22 @@ const ConceptMap = ({ projectId, documents }) => {
           <MindMapCanvas map={map} progressFor={progressFor} selected={selected} onSelect={setSelected} />
         </section>
 
-        <aside className="card xl:max-h-[720px] xl:overflow-y-auto">
+        {selected && <div className="fixed inset-0 z-30 bg-zinc-950/30 lg:hidden" onClick={() => setSelected(null)} aria-hidden="true" />}
+        <aside
+          className={`card lg:static lg:block lg:max-h-[720px] lg:w-auto lg:overflow-y-auto lg:rounded-xl lg:shadow-none ${
+            selected
+              ? 'fixed inset-y-0 right-0 z-40 w-80 max-w-[90vw] animate-fade-in overflow-y-auto rounded-none shadow-2xl'
+              : 'hidden'
+          }`}
+          aria-label="Details"
+        >
+          {selected && (
+            <div className="flex justify-end px-3 pt-3 lg:hidden">
+              <button type="button" onClick={() => setSelected(null)} className="btn btn-ghost btn-icon" aria-label="Close details">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <DetailPanel projectId={projectId} documentId={documentId} map={map} selected={selected} onSelect={setSelected} progressFor={progressFor} />
         </aside>
       </div>

@@ -1,5 +1,5 @@
 import { AlertCircle, BookOpen } from 'lucide-react';
-import RichText, { sourceLabel } from '../ui/RichText';
+import RichText, { SourceChips } from '../ui/RichText';
 
 const CONFIDENCE = {
   high: { label: 'Grounded in your documents', className: 'badge-success' },
@@ -49,7 +49,7 @@ const ChatMessage = ({ message }) => {
         {(sources.length > 0 || confidence) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {confidence && <span className={`badge ${confidence.className}`}>{confidence.label}</span>}
-            {sources.length > 0 && <span className="muted text-xs">Sources: {sources.map(sourceLabel).join('; ')}</span>}
+            <SourceChips sources={sources} />
           </div>
         )}
         {message.timestamp && <p className="mt-2 text-[11px] text-zinc-400">{formatTime(message.timestamp)}</p>}

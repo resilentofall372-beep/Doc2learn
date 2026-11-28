@@ -14,7 +14,7 @@ const QuizQuestion = ({ question, selectedAnswer, onAnswerSelect }) => {
               role="radio"
               aria-checked={active}
               onClick={() => onAnswerSelect(key)}
-              className={`choice flex w-full items-start gap-3 px-4 py-3 text-left font-normal ${active ? 'choice-active' : ''}`}
+              className={`choice flex w-full items-start gap-3 px-4 py-3 text-left font-normal ${active ? 'choice-selected' : ''}`}
             >
               <span
                 className={`grid h-6 w-6 flex-shrink-0 place-items-center rounded-md border text-xs font-semibold ${

@@ -141,7 +141,7 @@ const RoomResults = ({ room, participants, totalQuestions, isHost, review = [] }
                 {q.explanation && <p className="mt-1.5 text-zinc-600 dark:text-zinc-400">{q.explanation}</p>}
                 {(q.source_document || q.source_page) && (
                   <span className="badge badge-neutral mt-2">
-                    {sourceLabel({ filename: q.source_document?.filename, page: q.source_page })}
+                    {sourceLabel({ filename: q.source_document?.filename, page: q.source_page, section: q.source_section })}
                   </span>
                 )}
               </li>

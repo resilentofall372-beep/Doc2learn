@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Check, MessageSquareText, RotateCcw, X } from 'lucide-react';
-import { sourceLabel } from '../ui/RichText';
+import { SourceChips } from '../ui/RichText';
 
 const verdict = (pct) => {
   if (pct >= 90) return 'Excellent work';
@@ -171,7 +171,7 @@ const QuizResults = ({ results, onRestart, projectId }) => {
                       )}
                     </dl>
                     {q.explanation && <p className="mt-3 text-zinc-600 dark:text-zinc-400">{q.explanation}</p>}
-                    {q.source && <span className="badge badge-neutral mt-3">{sourceLabel(q.source)}</span>}
+                    {q.source && <SourceChips sources={[q.source]} label="Source:" className="mt-3" />}
                   </div>
                 </li>
               );

@@ -69,6 +69,8 @@ export const documentAPI = {
   },
   paste: (projectId, title, text) => api.post('/document/paste', { project_id: projectId, title, text }),
   deleteDocument: (documentId) => api.delete(`/document/${documentId}`),
+  /** A document's text split into pages or sections, for the reader. */
+  get: (documentId) => api.get(`/document/${documentId}`),
   generateQuiz: ({ projectId, documentId, topicId, num_questions, difficulty, focus }) =>
     api.post('/document/generate-quiz', {
       ...scope(projectId, documentId),
@@ -77,6 +79,8 @@ export const documentAPI = {
       difficulty,
       focus,
     }),
+  /** Add more questions to a quiz that is being taken (the first question is written alone). */
+  extendQuiz: (quizId, num_questions) => api.post('/document/generate-quiz', { quiz_id: quizId, num_questions }),
   generateFlashcards: ({ projectId, documentId, topicId, num_cards }) =>
     api.post('/document/generate-flashcards', {
       ...scope(projectId, documentId),
@@ -123,8 +127,19 @@ export const assistantAPI = {
     api.post('/assistant/explain', { ...scope(projectId, documentId), concept, topic_id: topicId || undefined }),
   /** Saved topic explanations, newest first. */
   explanations: (projectId) => api.get('/assistant/explanations', { params: { project_id: projectId } }),
-  generatePractice: (projectId, documentId, topic, numProblems = 5) =>
-    api.post('/assistant/practice', { ...scope(projectId, documentId), topic, num_problems: numProblems }),
+  /** With a topicId, the problems are about that outline topic and graded answers count towards it. */
+  generatePractice: (projectId, documentId, topic, numProblems = 5, topicId) =>
+    api.post('/assistant/practice', { ...scope(projectId, documentId), topic, num_problems: numProblems, topic_id: topicId || undefined }),
+  /** Grade one written answer: {verdict: correct|partial|incorrect, feedback, missing, sources, credit, counted}. */
+  gradePractice: (projectId, documentId, { question, modelAnswer, answer, topicId, attemptId }) =>
+    api.post('/assistant/practice/grade', {
+      ...scope(projectId, documentId),
+      question,
+      model_answer: modelAnswer,
+      answer,
+      topic_id: topicId || undefined,
+      attempt_id: attemptId || undefined, // re-checking replaces the earlier grade
+    }),
   summarize: (projectId, documentId, summaryType = 'brief') =>
     api.post('/assistant/summarize', { ...scope(projectId, documentId), summary_type: summaryType }),
   createStudyPlan: (projectId, documentId, weakAreas, days = 7) =>

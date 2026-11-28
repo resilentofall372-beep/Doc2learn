@@ -11,6 +11,8 @@ const StudyRooms = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState(null);
+  const [checking, setChecking] = useState(false);
   const { addNotification } = useApp();
   const navigate = useNavigate();
 
@@ -44,27 +46,47 @@ const StudyRooms = () => {
 
       <form
         className="card flex flex-col gap-4 p-5 sm:flex-row sm:items-center"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (code.trim().length === 6) navigate(`/join/${code.trim().toUpperCase()}`);
+          const wanted = code.trim().toUpperCase();
+          if (wanted.length !== 6 || checking) return;
+          // Check the code here, so a wrong one is reported under the box instead of on its own page.
+          setChecking(true);
+          setCodeError(null);
+          try {
+            await roomAPI.getRoomByCode(wanted);
+            navigate(`/join/${wanted}`);
+          } catch (error) {
+            setCodeError(error?.response?.status === 404 ? 'No open quiz has this code.' : errorMessage(error, 'Could not check this code'));
+          } finally {
+            setChecking(false);
+          }
         }}
       >
         <div className="flex-1">
           <h2 className="card-title">Join with a code</h2>
           <p className="muted mt-0.5 text-sm">Enter the six characters shown on the host&apos;s screen.</p>
         </div>
-        <div className="flex gap-2">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-            maxLength={6}
-            placeholder="ABC123"
-            aria-label="Room code"
-            className="input w-36 text-center font-mono text-base uppercase tracking-[0.3em]"
-          />
-          <button type="submit" className="btn btn-secondary" disabled={code.length !== 6}>
-            Join
-          </button>
+        <div>
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                setCodeError(null);
+              }}
+              maxLength={6}
+              placeholder="ABC123"
+              aria-label="Room code"
+              aria-invalid={Boolean(codeError)}
+              aria-describedby={codeError ? 'room-code-error' : undefined}
+              className={`input w-36 text-center font-mono text-base uppercase tracking-[0.3em] ${codeError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+            />
+            <button type="submit" className="btn btn-secondary" disabled={code.length !== 6 || checking}>
+              {checking ? 'Checking…' : 'Join'}
+            </button>
+          </div>
+          {codeError && <p id="room-code-error" className="field-error">{codeError}</p>}
         </div>
       </form>
 

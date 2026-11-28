@@ -79,14 +79,16 @@ const ChatInterface = ({ projectId, project, documents }) => {
     setMessages([]);
   };
 
-  const fileCount = `${documents.length} ${documents.length === 1 ? 'document' : 'documents'}`;
+  const scopeText =
+    documents.length === 1 ? 'Answers from your document, with the section or page it came from.' : `Searches all ${documents.length} documents and cites the file and section or page.`;
 
   return (
-    <section className="card flex h-[calc(100vh-17rem)] min-h-[30rem] flex-col">
+    // Fill the rest of the window below the page header (lg: sticky beside the study tools).
+    <section className="card flex h-[calc(100dvh-11rem)] min-h-[28rem] flex-col lg:h-[calc(100dvh-12.5rem)]">
       <div className="card-header py-3">
         <div>
           <h2 className="card-title">Tutor</h2>
-          <p className="muted text-xs">Searches all {fileCount} in this project and cites the file and page.</p>
+          <p className="muted text-xs">{scopeText}</p>
         </div>
         {messages.length > 0 && (
           <button type="button" onClick={clear} className="btn btn-ghost btn-sm">

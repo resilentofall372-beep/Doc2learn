@@ -4,11 +4,22 @@ import { ChevronRight, FolderOpen, Plus, Radio, Upload } from 'lucide-react';
 import { errorMessage, projectAPI } from '../../services/api';
 import { projectStore } from '../../services/projectStore';
 import EmptyState from '../ui/EmptyState';
-import { PageLoader } from '../common/LoadingSpinner';
 import AddDocumentsDialog from '../document/AddDocumentsDialog';
 import { SECTIONS, sectionFor } from './sections';
 
 export const forgetProject = (projectId) => projectStore.forget(projectId);
+
+/** Grey outline of the page header and content while the project loads. */
+const LayoutSkeleton = () => (
+  <div aria-busy="true" aria-label="Loading project">
+    <div className="mb-6 space-y-2">
+      <div className="skeleton h-3 w-40" />
+      <div className="skeleton h-7 w-64" />
+      <div className="skeleton h-4 w-96 max-w-full" />
+    </div>
+    <div className="card h-64" />
+  </div>
+);
 
 /** Section tabs for small screens (on large screens the sidebar shows them). */
 const MobileSections = ({ base, current }) => (
@@ -110,7 +121,7 @@ const ProjectLayout = ({ children, needsDocuments = true, actions = null }) => {
       </div>
     );
   }
-  if (!data) return <PageLoader />;
+  if (!data) return <LayoutSkeleton />;
 
   const { project, documents } = data;
   const base = `/projects/${projectId}`;
@@ -128,7 +139,15 @@ const ProjectLayout = ({ children, needsDocuments = true, actions = null }) => {
             {page.title !== 'Overview' && (
               <>
                 <ChevronRight className="h-3 w-3 flex-shrink-0" />
-                <span className="truncate">{section.key === 'practice' ? 'Practice' : page.title}</span>
+                {page.child || page.title !== section.title ? (
+                  <>
+                    <Link to={`${base}${section.path}`} className="hover:text-zinc-900 dark:hover:text-zinc-100">{section.label}</Link>
+                    <ChevronRight className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{page.title}</span>
+                  </>
+                ) : (
+                  <span className="truncate">{section.label}</span>
+                )}
               </>
             )}
           </nav>
@@ -141,8 +160,9 @@ const ProjectLayout = ({ children, needsDocuments = true, actions = null }) => {
         </div>
         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
           {actions}
-          {documents.length > 0 && (
-            <Link to={`/create-quiz-room?project=${projectId}`} className="btn btn-secondary">
+          {/* Hosting belongs with practising: only on Home and the Practice pages. */}
+          {documents.length > 0 && ((section.key === 'overview' && page.title === 'Overview') || page.child) && (
+            <Link to={`${base}/live`} className="btn btn-secondary">
               <Radio className="h-4 w-4" />
               Host live quiz
             </Link>

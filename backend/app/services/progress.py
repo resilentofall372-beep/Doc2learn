@@ -4,15 +4,17 @@ Mastery (0-100) comes from two kinds of evidence per topic:
 - quiz answers: the share right among the latest 20 answers to questions tagged with the topic;
 - flashcards: the share of the topic's reviewed cards whose last rating was good or easy.
 Quiz answers weigh more (70/30) because they are graded, while card ratings are self-reported.
-That share is `accuracy`. Mastery is accuracy scaled down until there are MIN_EVIDENCE answers
-and reviews, so one lucky answer reads as 20%, not 100%.
+That share is `accuracy`. Mastery is the weighted share right with PRIOR_ANSWERS extra wrong
+answers mixed in (a card rating counts as half an answer), so one lucky answer reads as 33%, not
+100%, and every right answer raises it while every wrong one lowers it: 1/1 is 33%, 1/2 is 25%,
+5/5 is 71%, 10/10 is 83%.
 
 Status per topic:
-- not_started: no quiz answers and no card reviews yet;
+- not_started: no quiz answers, no card reviews and no explanation read yet;
 - review_due:  flashcards for it are due now;
 - mastered:    mastery >= 80 with at least 5 quiz answers and, if it has reviewed cards,
                one card that has come back after a gap of 3+ days (spaced review);
-- learning:    anything in between.
+- learning:    anything in between (including "read the explanation, not tested yet").
 
 `learned` is set once the learner has generated an explanation of the topic ("Learn it").
 Cards are `new` while they sit in the topic's latest deck without ever being rated.
@@ -29,7 +31,8 @@ from ..utils import as_utc, utcnow
 RECENT_ANSWERS = 20
 MASTERED_AT = 80
 MIN_ANSWERS_FOR_MASTERY = 5
-MIN_EVIDENCE = 5  # answers + reviewed cards before mastery can reach its full value
+PRIOR_ANSWERS = 2  # imaginary wrong answers every topic starts with, so little evidence reads low
+CARD_WEIGHT = 0.5  # a self-rated card counts as half a graded quiz answer
 SPACED_DAYS = 3  # a reviewed card's interval must reach this before the topic counts as mastered
 WEAK_BELOW = 60
 
@@ -78,16 +81,18 @@ def topic_progress(
     db = get_db()
     learned = learned or {}
 
-    answers: dict[str, list[bool]] = defaultdict(list)
+    # Credit per answer: 1 right, 0 wrong; graded written answers can earn 0.5 for "partly right".
+    answers: dict[str, list[float]] = defaultdict(list)
     attempts = db[Collections.QUIZ_ATTEMPTS].find(
         {"user_id": user_id, "project_id": project_id},
-        {"results.topic_id": 1, "results.is_correct": 1},
+        {"results.topic_id": 1, "results.is_correct": 1, "results.credit": 1},
     ).sort("submitted_at", -1)
     for attempt in attempts:
         for result in attempt.get("results") or []:
             topic_id = result.get("topic_id")
             if topic_id and len(answers[topic_id]) < RECENT_ANSWERS:
-                answers[topic_id].append(bool(result.get("is_correct")))
+                credit = result.get("credit")
+                answers[topic_id].append(float(credit) if isinstance(credit, (int, float)) else float(bool(result.get("is_correct"))))
 
     def empty_bucket():
         return {"reviewed": 0, "due": 0, "known": 0, "new": 0, "spaced": False}
@@ -127,11 +132,13 @@ def topic_progress(
         if card["reviewed"]:
             parts.append((0.3, card["known"] / card["reviewed"]))
         accuracy = sum(w * v for w, v in parts) / sum(w for w, _ in parts) if parts else None
-        evidence = min(1.0, (answered + card["reviewed"]) / MIN_EVIDENCE)
-        mastery = round(100 * accuracy * evidence) if accuracy is not None else None
+        earned = correct + CARD_WEIGHT * card["known"]
+        weight = answered + CARD_WEIGHT * card["reviewed"]
+        mastery = round(100 * earned / (weight + PRIOR_ANSWERS)) if parts else None
+        is_learned = topic["id"] in learned
 
         if mastery is None:
-            status = "not_started"
+            status = "learning" if is_learned else "not_started"
         elif card["due"]:
             status = "review_due"
         elif mastery >= MASTERED_AT and answered >= MIN_ANSWERS_FOR_MASTERY and (spaced or not card["reviewed"]):
@@ -148,8 +155,8 @@ def topic_progress(
                 "mastery": mastery,
                 "accuracy": round(100 * accuracy) if accuracy is not None else None,
                 "status": status,
-                "learned": topic["id"] in learned,
-                "quiz": {"answered": answered, "correct": correct},
+                "learned": is_learned,
+                "quiz": {"answered": answered, "correct": round(correct, 1) if correct % 1 else int(correct)},
                 "cards": card,
             }
         )

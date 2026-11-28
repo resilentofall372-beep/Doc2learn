@@ -83,7 +83,7 @@ const LiveQuiz = ({
                   type="button"
                   onClick={() => choose(key)}
                   disabled={locked}
-                  className={`choice flex items-start gap-3 px-4 py-4 text-left font-normal disabled:cursor-default ${active ? 'choice-active' : ''} ${
+                  className={`choice flex items-start gap-3 px-4 py-4 text-left font-normal disabled:cursor-default ${active ? 'choice-selected' : ''} ${
                     locked && !active && !isHost ? 'opacity-50' : ''
                   }`}
                 >

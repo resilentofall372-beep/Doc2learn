@@ -71,7 +71,7 @@ def latest():
 @bp.post("/review")
 @require_auth
 def review():
-    """Rate one card. Body: {project_id, rating, card: {id, front, back, topic_id?, source_document?, source_page?}, document_id?}"""
+    """Rate one card. Body: {project_id, rating, card: {id, front, back, topic_id?, source_document?, source_page?, source_section?}, document_id?}"""
     data = request.get_json(silent=True) or {}
     project_id = owned_project_id(data.get("project_id"))
     rating = data.get("rating")
@@ -105,6 +105,7 @@ def review():
                 "document_id": clean_str(data.get("document_id"), 64) or clean_str((source or {}).get("document_id"), 64) or None,
                 "source_document": {"document_id": clean_str(source.get("document_id"), 64), "filename": clean_str(source.get("filename"), 200)} if source else None,
                 "source_page": card.get("source_page") if isinstance(card.get("source_page"), int) else None,
+                "source_section": clean_str(card.get("source_section"), 80) or None,
             },
             "$inc": {"review_count": 1},
             "$setOnInsert": {"created_at": now},
@@ -141,6 +142,7 @@ def due():
             "topic_id": r.get("topic_id"),
             "source_document": r.get("source_document"),
             "source_page": r.get("source_page"),
+            "source_section": r.get("source_section"),
             "document_id": r.get("document_id"),
             "last_rating": r.get("last_rating"),
             "interval_days": r.get("interval_days"),

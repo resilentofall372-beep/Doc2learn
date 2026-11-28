@@ -11,21 +11,26 @@ import { STATUS } from '../../utils/progress';
  * - Dashed lines are cross-links between related concepts in different branches.
  */
 
+// Boxes are tall enough for two lines, so labels wrap instead of being cut off.
 const SIZE = {
-  center: { w: 210, h: 52 },
-  branch: { w: 200, h: 46 },
-  concept: { w: 168, h: 34 },
+  center: { w: 230, h: 60 },
+  branch: { w: 210, h: 54 },
+  concept: { w: 176, h: 44 },
 };
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.5;
+const READABLE_ZOOM = 0.8; // the first view never starts smaller than this; "Fit" shows everything
 
 const polar = (r, a) => ({ x: r * Math.cos(a), y: r * Math.sin(a) });
 
+// The room a box of `size` takes along the ring (tangent) and across it (radial) at angle a:
+// at the top and bottom of the map neighbours sit side by side, so their width counts.
+const along = (size, a) => Math.abs(Math.sin(a)) * size.w + Math.abs(Math.cos(a)) * size.h;
+const across = (size, a) => Math.abs(Math.cos(a)) * size.w + Math.abs(Math.sin(a)) * size.h;
+
 const layout = (map, collapsed) => {
   const n = Math.max(1, map.branches.length);
-  const most = Math.max(1, ...map.branches.map((b) => b.concepts.length));
-  const r1 = n <= 4 ? 210 : n <= 7 ? 250 : 290;
-  const r2 = r1 + 190 + Math.max(0, most - 4) * 18;
+  const r1 = n <= 4 ? 220 : n <= 7 ? 270 : 320;
   const slice = (2 * Math.PI) / n;
   const nodes = { center: { x: 0, y: 0 } };
   map.branches.forEach((b, i) => {
@@ -33,15 +38,25 @@ const layout = (map, collapsed) => {
     nodes[b.id] = { ...polar(r1, angle), angle };
     if (collapsed.has(b.id)) return;
     const m = b.concepts.length;
-    // Fan concepts across part of the branch's slice: wide enough to not overlap, never into the neighbour.
-    const span = Math.min(slice * 0.82, ((m - 1) * (SIZE.concept.h + 12)) / r2 + 0.05);
+    if (!m) return;
+    const step = along(SIZE.concept, angle) * 1.08 + 14; // centre-to-centre distance along the ring
+    const rowGap = across(SIZE.concept, angle) + 16;
+    // Just clear of the branch box.
+    const base = r1 + (across(SIZE.branch, angle) + across(SIZE.concept, angle)) / 2 + 48;
+    // The radius at which the concepts (centres plus half a box at each end) fit in the slice.
+    const fits = (rows) => (step * ((m - 1) / rows + 1)) / slice;
+    const rows = m >= 4 && fits(1) > base * 1.2 ? 2 : 1;
+    const r = Math.max(base, fits(rows));
+    const angleStep = m > 1 ? step / (rows * r) : 0;
+    const span = angleStep * (m - 1);
     b.concepts.forEach((c, j) => {
-      const a = m === 1 ? angle : angle - span / 2 + (span * j) / (m - 1);
-      nodes[c.id] = polar(r2, a);
+      // With two rows, concepts alternate between an inner and an outer ring.
+      const radius = rows === 2 && j % 2 ? r + rowGap : r;
+      nodes[c.id] = polar(radius, angle - span / 2 + j * angleStep);
     });
   });
   const pts = Object.values(nodes);
-  const pad = 140;
+  const pad = SIZE.branch.w / 2 + 30;
   const box = {
     minX: Math.min(...pts.map((p) => p.x)) - pad,
     maxX: Math.max(...pts.map((p) => p.x)) + pad,
@@ -94,17 +109,25 @@ const MindMapCanvas = ({ map, progressFor, selected, onSelect, height = 620 }) =
     return () => observer.disconnect();
   }, []);
 
-  const fit = useCallback(() => {
-    const bw = box.maxX - box.minX;
-    const bh = box.maxY - box.minY;
-    const k = Math.max(MIN_ZOOM, Math.min(1.1, (size.w / bw) * 0.95, (size.h / bh) * 0.95));
-    setView({ k, x: size.w / 2 - ((box.minX + box.maxX) / 2) * k, y: size.h / 2 - ((box.minY + box.maxY) / 2) * k });
-  }, [box, size]);
+  // `minZoom`: the first view stays readable (drag to see the rest); the Fit button shows everything.
+  const fit = useCallback(
+    (minZoom = MIN_ZOOM) => {
+      const bw = box.maxX - box.minX;
+      const bh = box.maxY - box.minY;
+      const k = Math.max(minZoom, Math.min(1.1, (size.w / bw) * 0.95, (size.h / bh) * 0.95));
+      // When zoomed in past "fit", centre on the middle of the map rather than the box.
+      const zoomedIn = k > Math.min((size.w / bw) * 0.95, (size.h / bh) * 0.95);
+      const cx = zoomedIn ? 0 : (box.minX + box.maxX) / 2;
+      const cy = zoomedIn ? 0 : (box.minY + box.maxY) / 2;
+      setView({ k, x: size.w / 2 - cx * k, y: size.h / 2 - cy * k });
+    },
+    [box, size]
+  );
 
   // Fit when the map or the container changes size (not when collapsing, so the view doesn't jump).
   const fitKey = `${map.branches.length}:${Math.round(size.w)}:${Math.round(size.h)}`;
   useEffect(() => {
-    fit();
+    fit(READABLE_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, map]);
 
@@ -195,7 +218,7 @@ const MindMapCanvas = ({ map, progressFor, selected, onSelect, height = 620 }) =
           <button type="button" onClick={() => zoomAt(1.2, size.w / 2, size.h / 2)} className="btn btn-ghost btn-icon p-1.5" aria-label="Zoom in">
             <Plus className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={fit} className="btn btn-ghost btn-icon p-1.5" aria-label="Fit to screen" title="Fit to screen">
+          <button type="button" onClick={() => fit()} className="btn btn-ghost btn-icon p-1.5" aria-label="Fit to screen" title="Fit to screen">
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -258,7 +281,7 @@ const MindMapCanvas = ({ map, progressFor, selected, onSelect, height = 620 }) =
               onSelect={() => onSelect?.({ type: 'center' })}
               className="justify-center border-primary-600 bg-primary-600 text-center text-sm font-semibold text-white hover:bg-primary-500"
             >
-              <span className="truncate">{map.central}</span>
+              <span className="line-clamp-2 leading-tight">{map.central}</span>
             </NodeBox>
 
             {/* branches and concepts */}
@@ -277,7 +300,7 @@ const MindMapCanvas = ({ map, progressFor, selected, onSelect, height = 620 }) =
                     className={`text-sm font-semibold hover:brightness-95 ${b.color.node}`}
                   >
                     <span className={`h-2.5 w-2.5 flex-shrink-0 rounded-full ${progress ? STATUS[progress.status]?.dot : b.color.chip}`} />
-                    <span className="min-w-0 flex-1 truncate">{b.topic}</span>
+                    <span className="line-clamp-2 min-w-0 flex-1 leading-tight">{b.topic}</span>
                     {progress?.mastery != null && <span className="text-[11px] font-medium tabular-nums opacity-70">{progress.mastery}%</span>}
                   </NodeBox>
                   {b.concepts.length > 0 && (
@@ -307,7 +330,7 @@ const MindMapCanvas = ({ map, progressFor, selected, onSelect, height = 620 }) =
                         className="border-zinc-200 bg-white text-xs font-medium text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                       >
                         <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${b.color.chip}`} />
-                        <span className="truncate">{c.label}</span>
+                        <span className="line-clamp-2 min-w-0 leading-tight">{c.label}</span>
                       </NodeBox>
                     ))}
                 </g>
@@ -333,7 +356,7 @@ const MindMapCanvas = ({ map, progressFor, selected, onSelect, height = 620 }) =
             </span>
           )}
         </div>
-        <span className="muted">Scroll to zoom · drag to move · click a node for details</span>
+        <span className="muted">Scroll to zoom · drag to move · click a node to open its details</span>
       </div>
     </div>
   );

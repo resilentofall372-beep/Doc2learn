@@ -1,13 +1,15 @@
 // One hue per branch. Full class strings so Tailwind keeps them.
+// None of them is a progress colour (grey, indigo, amber, emerald), so a branch's colour
+// can't be mistaken for "Review due" or "Mastered" in the map's legend.
 export const BRANCH_COLORS = [
-  { stroke: '#6366f1', node: 'border-indigo-300 bg-indigo-50 text-indigo-900 dark:border-indigo-500/50 dark:bg-indigo-500/15 dark:text-indigo-100', chip: 'bg-indigo-500' },
   { stroke: '#0ea5e9', node: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/50 dark:bg-sky-500/15 dark:text-sky-100', chip: 'bg-sky-500' },
-  { stroke: '#10b981', node: 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-500/15 dark:text-emerald-100', chip: 'bg-emerald-500' },
-  { stroke: '#f59e0b', node: 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/15 dark:text-amber-100', chip: 'bg-amber-500' },
-  { stroke: '#f43f5e', node: 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-500/15 dark:text-rose-100', chip: 'bg-rose-500' },
   { stroke: '#8b5cf6', node: 'border-violet-300 bg-violet-50 text-violet-900 dark:border-violet-500/50 dark:bg-violet-500/15 dark:text-violet-100', chip: 'bg-violet-500' },
-  { stroke: '#14b8a6', node: 'border-teal-300 bg-teal-50 text-teal-900 dark:border-teal-500/50 dark:bg-teal-500/15 dark:text-teal-100', chip: 'bg-teal-500' },
-  { stroke: '#f97316', node: 'border-orange-300 bg-orange-50 text-orange-900 dark:border-orange-500/50 dark:bg-orange-500/15 dark:text-orange-100', chip: 'bg-orange-500' },
+  { stroke: '#f43f5e', node: 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-500/15 dark:text-rose-100', chip: 'bg-rose-500' },
+  { stroke: '#06b6d4', node: 'border-cyan-300 bg-cyan-50 text-cyan-900 dark:border-cyan-500/50 dark:bg-cyan-500/15 dark:text-cyan-100', chip: 'bg-cyan-500' },
+  { stroke: '#d946ef', node: 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-900 dark:border-fuchsia-500/50 dark:bg-fuchsia-500/15 dark:text-fuchsia-100', chip: 'bg-fuchsia-500' },
+  { stroke: '#ec4899', node: 'border-pink-300 bg-pink-50 text-pink-900 dark:border-pink-500/50 dark:bg-pink-500/15 dark:text-pink-100', chip: 'bg-pink-500' },
+  { stroke: '#3b82f6', node: 'border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-500/50 dark:bg-blue-500/15 dark:text-blue-100', chip: 'bg-blue-500' },
+  { stroke: '#a855f7', node: 'border-purple-300 bg-purple-50 text-purple-900 dark:border-purple-500/50 dark:bg-purple-500/15 dark:text-purple-100', chip: 'bg-purple-500' },
 ];
 
 /** Branches and concepts with stable ids, from new maps ({concepts}) or older ones ({subtopics}). */

@@ -17,7 +17,7 @@ const StatsCard = ({ title, value, icon: Icon, hint, tone = 'neutral' }) => (
     <div className="min-w-0">
       <p className="muted truncate text-xs font-medium">{title}</p>
       <p className="mt-0.5 text-xl font-semibold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">{value}</p>
-      {hint && <p className="muted mt-0.5 truncate text-xs">{hint}</p>}
+      {hint && <p className="muted mt-0.5 text-xs leading-snug">{hint}</p>}
     </div>
   </div>
 );

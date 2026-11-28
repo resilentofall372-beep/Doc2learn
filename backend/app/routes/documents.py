@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.utils import secure_filename
 
-from ..access import owned_document, owned_project, owned_project_id, resolve_scope, scope_ids, touch_project
+from ..access import owned, owned_document, owned_project, owned_project_id, resolve_scope, scope_ids, touch_project
 from ..auth import require_auth
 from ..errors import ApiError
 from ..extensions import Collections, get_db
@@ -145,12 +145,24 @@ def _store(project_id: str, filename: str, ext: str, size: int, extracted: Extra
     )
 
 
+def reader_sections(doc: dict) -> list[dict]:
+    """The document as [{page, title, text}] for the reader: one entry per page or section."""
+    text = doc.get("extracted_text", "")
+    pages = doc.get("pages") or []
+    if not pages:
+        return [{"page": 1, "title": None, "text": text}] if text else []
+    return [{"page": p["page"], "title": p.get("title"), "text": text[p["start"]:p["end"]]} for p in pages]
+
+
 @bp.get("/<document_id>")
 @require_auth
 def get_document(document_id):
-    doc = owned_document(document_id, {"pages": 0})
+    """A document with its text, split into pages or sections so the reader can open a citation."""
+    doc = owned_document(document_id)
     payload = summary(doc)
     payload["extracted_text"] = doc.get("extracted_text", "")
+    payload["sections"] = reader_sections(doc)
+    payload["has_sections"] = any(p.get("title") for p in doc.get("pages") or [])
     return jsonify({"success": True, "document": payload})
 
 
@@ -183,7 +195,11 @@ def _topic_args(scope: dict, data: dict) -> tuple[dict | None, list[dict], str |
 @bp.post("/generate-quiz")
 @require_auth
 def generate_quiz():
+    """Write a quiz. With `quiz_id` (one of your quizzes), add `num_questions` more to it instead:
+    the page asks for the first question alone so the learner can start while the rest are written."""
     data = request.get_json(silent=True) or {}
+    if data.get("quiz_id"):
+        return _extend_quiz(data)
     scope = resolve_scope(data)
     num_questions = clamp(data.get("num_questions"), 1, 25, 5)
     difficulty = data.get("difficulty") if data.get("difficulty") in DIFFICULTIES else "medium"
@@ -221,6 +237,31 @@ def generate_quiz():
             "questions": questions,
         }
     )
+
+
+def _extend_quiz(data: dict):
+    quiz = owned(Collections.QUIZZES, data.get("quiz_id"), "quiz")
+    if quiz.get("attempted"):
+        raise ApiError("This quiz has already been submitted")
+    more = clamp(data.get("num_questions"), 1, 24, 4)
+    scope = {"project_id": quiz["project_id"], "document_id": quiz.get("document_id")}
+    topics = topic_list(quiz["project_id"], g.user_id)
+    questions = generation.generate_quiz(
+        scope,
+        more,
+        quiz.get("difficulty") or "medium",
+        quiz.get("focus"),
+        topics=topics,
+        topic_id=quiz.get("topic_id"),
+        avoid=[q["question"] for q in quiz["questions"]],
+    )
+    asked = {q["question"].strip().lower() for q in quiz["questions"]}
+    questions = [q for q in questions if q["question"].strip().lower() not in asked][:more]
+    if questions:
+        get_db()[Collections.QUIZZES].update_one(
+            {"_id": quiz["_id"]}, {"$push": {"questions": {"$each": questions}}, "$inc": {"num_questions": len(questions)}}
+        )
+    return jsonify({"success": True, "quiz_id": str(quiz["_id"]), "questions": questions})
 
 
 @bp.post("/generate-flashcards")

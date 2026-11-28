@@ -55,5 +55,44 @@ def move_loose_documents_into_projects(db) -> int:
     return moved
 
 
+def split_single_page_documents(db) -> int:
+    """Word and text files uploaded as one big page get split into sections at their headings,
+    so citations name a section instead of "p. 1". Chunks keep their text and embeddings; only
+    their page and section change. Returns the number of documents split; running again splits
+    nothing (they then have more than one page, or no headings to split at).
+    """
+    from .services.extract import page_for_offset, section_titles, sections_in_place
+
+    split = 0
+    candidates = db[Collections.DOCUMENTS].find(
+        {"file_type": {"$in": ["docx", "txt", "md"]}, "pages.1": {"$exists": False}, "sections_checked": {"$ne": True}},
+        {"extracted_text": 1},
+    )
+    for doc in candidates:
+        text = doc.get("extracted_text") or ""
+        pages = sections_in_place(text)
+        if not pages:
+            db[Collections.DOCUMENTS].update_one({"_id": doc["_id"]}, {"$set": {"sections_checked": True}})
+            continue
+        titles = section_titles(pages)
+        cursor = 0
+        for chunk in db[Collections.CHUNKS].find({"document_id": str(doc["_id"])}, {"text": 1}).sort("index", 1):
+            at = text.find(chunk["text"][:120], max(0, cursor - 2000))
+            if at == -1:
+                at = cursor
+            cursor = at
+            page = page_for_offset(pages, at)
+            db[Collections.CHUNKS].update_one({"_id": chunk["_id"]}, {"$set": {"page": page, "section": titles.get(str(page))}})
+        db[Collections.DOCUMENTS].update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"pages": pages, "page_count": len(pages), "sections_checked": True}},
+        )
+        split += 1
+    if split:
+        log.info("Split %d single-page document(s) into sections", split)
+    return split
+
+
 def run_migrations(db) -> None:
     move_loose_documents_into_projects(db)
+    split_single_page_documents(db)

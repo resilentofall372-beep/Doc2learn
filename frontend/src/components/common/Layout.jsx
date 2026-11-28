@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronLeft, FolderOpen, LogOut, Menu, Radio, X } from 'lucide-react';
+import { FolderOpen, LogOut, Menu, Radio, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProjectData } from '../../services/projectStore';
 import { SECTIONS, sectionFor } from '../projects/sections';
@@ -8,6 +8,7 @@ import Logo from '../ui/Logo';
 import Avatar, { colorFor } from '../ui/Avatar';
 import ThemeToggle from './ThemeToggle';
 import Notification from './Notification';
+import { SourceReader } from '../ui/RichText';
 
 const GLOBAL_NAV = [
   { to: '/projects', label: 'Projects', icon: FolderOpen, match: ['/projects'] },
@@ -54,10 +55,6 @@ const ProjectNav = ({ projectId, pathname, onNavigate }) => {
 
   return (
     <div className="px-3 pt-3">
-      <Link to="/projects" onClick={onNavigate} className="muted mb-3 inline-flex items-center gap-1 px-1 text-xs font-medium hover:text-zinc-900 dark:hover:text-zinc-100">
-        <ChevronLeft className="h-3.5 w-3.5" />
-        All projects
-      </Link>
       <Link to={base} onClick={onNavigate} className="mb-3 flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800/40 dark:hover:bg-zinc-800">
         <span className={`grid h-8 w-8 flex-shrink-0 place-items-center rounded-lg text-sm font-semibold text-white ${project ? colorFor(project.color, project.name) : 'bg-zinc-300 dark:bg-zinc-700'}`}>
           {project?.name?.slice(0, 1).toUpperCase() || ''}
@@ -105,7 +102,8 @@ const SidebarContent = ({ onNavigate }) => {
 
         <nav className={`space-y-0.5 px-3 ${projectId ? 'mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800' : 'py-4'}`} aria-label="Main">
           {projectId && <p className="eyebrow mb-1 px-3 text-[11px]">Workspace</p>}
-          {GLOBAL_NAV.map(({ to, label, icon: Icon, match }) => {
+          {/* Inside a project the page breadcrumb leads back to Projects, so it isn't repeated here. */}
+          {GLOBAL_NAV.filter((item) => !projectId || item.to !== '/projects').map(({ to, label, icon: Icon, match }) => {
             const active = !projectId && match.some((prefix) => pathname.startsWith(prefix));
             return (
               <Link key={to} to={to} onClick={onNavigate} className={navItem(active)}>
@@ -166,6 +164,7 @@ const AppShell = ({ children }) => {
       <main className="lg:pl-64">
         <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-8">{children}</div>
       </main>
+      <SourceReader />
       <Notification />
     </div>
   );

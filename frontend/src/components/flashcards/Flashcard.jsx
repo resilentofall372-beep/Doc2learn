@@ -29,7 +29,7 @@ const Flashcard = ({ card, showAnswer, onFlip }) => (
         label="Answer"
         footer={
           card.source_document
-            ? `From ${card.source_document.filename}${card.source_page ? `, page ${card.source_page}` : ''}`
+            ? `From ${card.source_document.filename}${card.source_section ? `, ${card.source_section}` : card.source_page ? `, page ${card.source_page}` : ''}`
             : card.source_page
               ? `From page ${card.source_page}`
               : 'Click to flip back'

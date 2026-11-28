@@ -21,6 +21,24 @@ const JoinRoom = () => {
   const [name, setName] = useState(user?.name || '');
   const [color, setColor] = useState(Math.floor(Math.random() * AVATAR_COLORS.length));
   const [code, setCode] = useState('');
+  const [codeError, setCodeError] = useState(null);
+  const [checking, setChecking] = useState(false);
+
+  // Look the code up first, so a wrong one is reported under the box instead of on its own page.
+  const continueWithCode = async (e) => {
+    e.preventDefault();
+    if (code.length !== 6 || checking) return;
+    setChecking(true);
+    setCodeError(null);
+    try {
+      await roomAPI.getRoomByCode(code);
+      navigate(`/join/${code}`);
+    } catch (err) {
+      setCodeError(err?.response?.status === 404 ? 'No open quiz has this code. Check it with the host.' : errorMessage(err, 'Could not check this code'));
+    } finally {
+      setChecking(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!roomCode) {
@@ -70,26 +88,28 @@ const JoinRoom = () => {
   // /join without a code: one box for the six characters the host shared.
   if (!roomCode) {
     return (
-      <form
-        className="card mx-auto max-w-md space-y-4 px-6 py-8 text-center"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (code.length === 6) navigate(`/join/${code}`);
-        }}
-      >
+      <form className="card mx-auto max-w-md space-y-4 px-6 py-8 text-center" onSubmit={continueWithCode}>
         <h1 className="text-xl font-semibold tracking-tight">Join a live quiz</h1>
         <p className="muted text-sm">Enter the code from the host. No account needed.</p>
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-          maxLength={6}
-          autoFocus
-          placeholder="ABC123"
-          aria-label="Room code"
-          className="input text-center font-mono text-lg uppercase tracking-[0.3em]"
-        />
-        <button type="submit" className="btn btn-primary w-full" disabled={code.length !== 6}>
-          Continue
+        <div>
+          <input
+            value={code}
+            onChange={(e) => {
+              setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+              setCodeError(null);
+            }}
+            maxLength={6}
+            autoFocus
+            placeholder="ABC123"
+            aria-label="Room code"
+            aria-invalid={Boolean(codeError)}
+            aria-describedby={codeError ? 'join-code-error' : undefined}
+            className={`input text-center font-mono text-lg uppercase tracking-[0.3em] ${codeError ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+          />
+          {codeError && <p id="join-code-error" className="field-error text-left">{codeError}</p>}
+        </div>
+        <button type="submit" className="btn btn-primary w-full" disabled={code.length !== 6 || checking}>
+          {checking ? <LoadingSpinner size="small" /> : 'Continue'}
         </button>
       </form>
     );

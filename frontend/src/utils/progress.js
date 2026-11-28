@@ -41,7 +41,16 @@ export const cardPayload = (card) => ({
   topic_id: card.topic_id || null,
   source_document: card.source_document || null,
   source_page: card.source_page ?? null,
+  source_section: card.source_section || null,
 });
+
+/** A generated item's {source_document, source_page, source_section} as a source for SourceChips. */
+export const itemSource = (item) =>
+  item?.source_document
+    ? { ...item.source_document, page: item.source_page ?? null, section: item.source_section || null }
+    : item?.source_page
+      ? { page: item.source_page }
+      : null;
 
 export const STATUS = {
   not_started: { label: 'Not started', badge: 'badge-neutral', bar: 'bg-zinc-300 dark:bg-zinc-600', dot: 'bg-zinc-300 dark:bg-zinc-600' },

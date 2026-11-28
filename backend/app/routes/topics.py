@@ -90,7 +90,7 @@ def _source_of(item: dict) -> list[dict]:
     doc = item.get("source_document")
     if not doc:
         return []
-    return [{"document_id": doc["document_id"], "filename": doc.get("filename", ""), "page": item.get("source_page")}]
+    return [{"document_id": doc["document_id"], "filename": doc.get("filename", ""), "page": item.get("source_page"), "section": item.get("source_section")}]
 
 
 def _merge_subtopics(old: list[str], new: list[str]) -> list[str]:
@@ -131,6 +131,25 @@ def _payload(project_id: str, row: dict | None) -> dict:
     return {"success": True, "outline": outline, "pending_documents": pending if row else [], "document_count": len(docs)}
 
 
+def _carry_over(row: dict | None, topics: list[dict]) -> tuple[dict, dict]:
+    """A rebuild gives every topic a new id: keep "learned" and saved explanations for topics
+    whose title is unchanged, so the Learn step stays ticked."""
+    if not row:
+        return {}, {}
+    new_ids = {t["title"].strip().lower(): t["id"] for t in topics}
+    learned, explanations = {}, {}
+    for old in row.get("topics") or []:
+        new_id = new_ids.get(old["title"].strip().lower())
+        if not new_id:
+            continue
+        if old["id"] in (row.get("learned") or {}):
+            learned[new_id] = row["learned"][old["id"]]
+        saved = (row.get("explanations") or {}).get(old["id"])
+        if saved:
+            explanations[new_id] = {**saved, "topic_id": new_id}
+    return learned, explanations
+
+
 # --------------------------------------------------------------------------- routes
 @bp.get("/")
 @require_auth
@@ -165,10 +184,11 @@ def build():
         if not generated:
             raise ApiError("The model did not produce a usable outline. Try again.", 502)
         topics = [_new_topic(t) for t in generated][:MAX_TOPICS]
+        learned, explanations = _carry_over(row, topics)
         db[Collections.TOPICS].update_one(
             {"project_id": project_id, "user_id": g.user_id},
             {
-                "$set": {"topics": topics, "document_ids": doc_ids, "updated_at": now},
+                "$set": {"topics": topics, "document_ids": doc_ids, "updated_at": now, "learned": learned, "explanations": explanations},
                 "$setOnInsert": {"created_at": now},
             },
             upsert=True,

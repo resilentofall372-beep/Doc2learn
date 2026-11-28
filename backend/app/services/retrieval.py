@@ -20,7 +20,7 @@ from typing import Iterable
 from flask import current_app
 
 from ..extensions import Collections, get_db
-from .extract import page_for_offset
+from .extract import page_for_offset, section_titles
 
 log = logging.getLogger(__name__)
 
@@ -110,8 +110,10 @@ def index_document(document_id: str, project_id: str, filename: str, text: str, 
     cfg = current_app.config
     chunks = chunk_text(text, cfg["CHUNK_SIZE_CHARS"], cfg["CHUNK_OVERLAP_CHARS"])
     vectors = embed([c["text"] for c in chunks])
+    titles = section_titles(pages)
     rows = []
     for index, chunk in enumerate(chunks):
+        page = page_for_offset(pages, chunk["start"])
         rows.append(
             {
                 "document_id": document_id,
@@ -119,7 +121,8 @@ def index_document(document_id: str, project_id: str, filename: str, text: str, 
                 "filename": filename,
                 "index": index,
                 "text": chunk["text"],
-                "page": page_for_offset(pages, chunk["start"]),
+                "page": page,
+                "section": titles.get(str(page)),
                 "embedding": vectors[index] if vectors else None,
             }
         )
@@ -147,22 +150,37 @@ def _chunk_filter(scope: dict) -> dict:
 def legend_for(project_id: str) -> tuple[dict, dict]:
     """Number the project's documents by upload order.
 
-    Returns (doc_id -> number, legend) where legend is {"1": {"document_id", "filename"}, ...}.
-    Numbers are stable for the whole project, whichever scope is being searched.
+    Returns (doc_id -> number, legend) where legend is {"1": {"document_id", "filename", "sections"}, ...}.
+    `sections` maps a Page number to its section heading for files split at headings
+    (Word, Markdown, text), so a citation can name the section. Numbers are stable for the
+    whole project, whichever scope is being searched.
     """
-    docs = get_db()[Collections.DOCUMENTS].find({"project_id": project_id}, {"filename": 1}).sort("uploaded_on", 1)
+    docs = get_db()[Collections.DOCUMENTS].find(
+        {"project_id": project_id}, {"filename": 1, "pages.page": 1, "pages.title": 1}
+    ).sort("uploaded_on", 1)
     numbers, legend = {}, {}
     for n, doc in enumerate(docs, start=1):
         doc_id = str(doc["_id"])
         numbers[doc_id] = n
         legend[str(n)] = {"document_id": doc_id, "filename": doc.get("filename", f"Document {n}")}
+        titles = section_titles(doc.get("pages") or [])
+        if titles:
+            legend[str(n)]["sections"] = titles
     return numbers, legend
+
+
+def section_of(legend: dict, doc: int | None, page: int | None) -> str | None:
+    """The section heading for [Doc doc, Page page], if that file is split into sections."""
+    if doc is None or page is None:
+        return None
+    return (legend.get(str(doc)) or {}).get("sections", {}).get(str(page))
 
 
 def _label(row: dict, numbers: dict) -> str:
     n = numbers.get(row["document_id"], "?")
     if row.get("page"):
-        return f"[Doc {n}, Page {row['page']}]"
+        label = f"[Doc {n}, Page {row['page']}]"
+        return f"{label} (section: {row['section']})" if row.get("section") else label
     return f"[Doc {n}]"
 
 
@@ -239,6 +257,7 @@ def search(scope: dict, query: str, top_k: int = 5) -> list[dict]:
             {
                 "text": row["text"],
                 "page": row.get("page"),
+                "section": row.get("section"),
                 "index": row["index"],
                 "document_id": row["document_id"],
                 "filename": row.get("filename", ""),
@@ -268,6 +287,7 @@ def context_for(scope: dict, query: str, max_chars: int = 6000, top_k: int = 6) 
             "document_id": hit["document_id"],
             "filename": hit["filename"],
             "page": hit.get("page"),
+            "section": hit.get("section"),
         }
         if ref not in used:
             used.append(ref)
@@ -279,7 +299,7 @@ def spread_context(scope: dict, max_chars: int = 9000) -> tuple[str, dict]:
     numbers, legend = legend_for(scope["project_id"])
     rows = list(
         get_db()[Collections.CHUNKS].find(
-            _chunk_filter(scope), {"text": 1, "page": 1, "index": 1, "document_id": 1}
+            _chunk_filter(scope), {"text": 1, "page": 1, "section": 1, "index": 1, "document_id": 1}
         )
     )
     if not rows:

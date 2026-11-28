@@ -28,7 +28,8 @@ def compute_stats(user_id: str, project_id: str | None = None) -> dict:
         scope["project_id"] = project_id
 
     total_documents = db[Collections.DOCUMENTS].count_documents(scope)
-    attempts = list(db[Collections.QUIZ_ATTEMPTS].find(scope, {"results": 0}).sort("submitted_at", -1))
+    # Graded written answers count towards topic mastery, not as quizzes taken.
+    attempts = list(db[Collections.QUIZ_ATTEMPTS].find({**scope, "kind": {"$ne": "written"}}, {"results": 0}).sort("submitted_at", -1))
     quizzes_taken = len(attempts)
     average = round(sum(a["percentage"] for a in attempts) / quizzes_taken) if quizzes_taken else 0
     study_seconds = sum(int(a.get("time_spent_seconds", 0)) for a in attempts)

@@ -129,10 +129,10 @@ const Review = ({ projectId }) => {
             }
             action={
               <div className="flex flex-wrap justify-center gap-2">
-                <Link to={`/projects/${projectId}`} className="btn btn-primary">Back to overview</Link>
-                <Link to={`/projects/${projectId}/flashcards${topicId ? `?topic=${topicId}` : ''}`} className="btn btn-secondary">
+                <Link to={`/projects/${projectId}/flashcards${topicId ? `?topic=${topicId}` : ''}`} className="btn btn-primary">
                   {finished ? 'Study more cards' : newCount ? `Study ${newCount} new ${newCount === 1 ? 'card' : 'cards'}` : 'Go to flashcards'}
                 </Link>
+                <Link to={`/projects/${projectId}`} className="btn btn-secondary">Back to home</Link>
               </div>
             }
           />

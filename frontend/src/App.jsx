@@ -69,6 +69,8 @@ function App() {
               <Route path="/projects/:projectId/documents" element={protectedPage(<ProjectDocuments />)} />
               <Route path="/projects/:projectId/map" element={protectedPage(<MindMapPage />)} />
               <Route path="/projects/:projectId/topics" element={protectedPage(<TopicsPage />)} />
+              {/* Hosting from a project keeps the project's menu. */}
+              <Route path="/projects/:projectId/live" element={protectedPage(<CreateQuizRoom />)} />
 
               <Route path="/study-rooms" element={protectedPage(<StudyRooms />)} />
               <Route path="/create-quiz-room" element={protectedPage(<CreateQuizRoom />)} />

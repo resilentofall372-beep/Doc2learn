@@ -21,9 +21,52 @@ import { useTask } from '../hooks/useTask';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import StatsCard from '../components/dashboard/StatsCard';
 import EmptyState from '../components/ui/EmptyState';
-import LoadingSpinner, { PageLoader } from '../components/common/LoadingSpinner';
+import LoadingSpinner from '../components/common/LoadingSpinner';
 import { STATUS, nextStepActions, topicRoutes } from '../utils/progress';
 import { timeAgo } from '../utils/time';
+import { plural } from '../utils/constants';
+
+// The last overview per project: shown at once on the next visit while a fresh copy loads.
+const overviewCache = new Map();
+
+/** Grey outlines of the Overview while it loads for the first time. */
+const OverviewSkeleton = () => (
+  <div className="space-y-6" aria-busy="true" aria-label="Loading your progress">
+    <div className="card flex items-center gap-4 p-5">
+      <div className="skeleton h-10 w-10 rounded-full" />
+      <div className="flex-1 space-y-2">
+        <div className="skeleton h-3 w-20" />
+        <div className="skeleton h-5 w-2/3" />
+      </div>
+      <div className="skeleton h-9 w-28" />
+    </div>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="card flex gap-3.5 p-4">
+          <div className="skeleton h-9 w-9" />
+          <div className="flex-1 space-y-2">
+            <div className="skeleton h-3 w-1/2" />
+            <div className="skeleton h-5 w-1/3" />
+          </div>
+        </div>
+      ))}
+    </div>
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="card divide-y divide-zinc-200 dark:divide-zinc-800">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-2.5 px-5 py-4">
+            <div className="skeleton h-4 w-1/3" />
+            <div className="skeleton h-1.5 w-full" />
+            <div className="skeleton h-6 w-3/4" />
+          </div>
+        ))}
+      </div>
+      <div className="card h-48 p-5">
+        <div className="skeleton h-4 w-1/2" />
+      </div>
+    </div>
+  </div>
+);
 
 // --------------------------------------------------------------------------- next step
 const NextStep = ({ projectId, step, onAddDocuments }) => {
@@ -244,11 +287,20 @@ const StudyPlan = ({ projectId, plan, hasOutline, onChange }) => {
 // --------------------------------------------------------------------------- page
 const Overview = ({ projectId, documents, addDocuments }) => {
   const run = useTask();
-  const [data, setData] = useState(null);
+  const [data, setDataState] = useState(() => overviewCache.get(projectId) || null);
+  const setData = useCallback(
+    (update) =>
+      setDataState((prev) => {
+        const next = typeof update === 'function' ? update(prev) : update;
+        if (next) overviewCache.set(projectId, next);
+        return next;
+      }),
+    [projectId]
+  );
 
   const load = useCallback(
     () => run('Could not load your progress', async () => setData((await projectAPI.overview(projectId)).data)),
-    [projectId, run]
+    [projectId, run, setData]
   );
 
   // Documents added from the header change the next step, so reload with them.
@@ -256,9 +308,10 @@ const Overview = ({ projectId, documents, addDocuments }) => {
     load();
   }, [load, documents.length]);
 
-  if (!data) return <PageLoader />;
+  if (!data) return <OverviewSkeleton />;
 
   const { summary, stats, topics } = data;
+  const topicTitle = Object.fromEntries(topics.map((t) => [t.id, t.title]));
   return (
     <div className="space-y-6">
       <NextStep projectId={projectId} step={data.next_step} onAddDocuments={addDocuments} />
@@ -273,8 +326,8 @@ const Overview = ({ projectId, documents, addDocuments }) => {
             !summary.topics
               ? 'Build the outline to track topics'
               : summary.average_mastery == null
-                ? 'Quizzes and card ratings count'
-                : `${summary.started} started · ${summary.average_mastery}% average mastery`
+                ? 'Quiz answers and card ratings build mastery'
+                : `${summary.started} started · ${summary.average_mastery}% average`
           }
         />
         <StatsCard
@@ -294,7 +347,7 @@ const Overview = ({ projectId, documents, addDocuments }) => {
           title="Quiz average"
           value={stats.quizzes_taken ? `${stats.average_score}%` : '—'}
           icon={Clock}
-          hint={stats.quizzes_taken ? `${stats.quizzes_taken} quizzes · ${stats.study_time_label}` : 'No quizzes yet'}
+          hint={stats.quizzes_taken ? `${plural(stats.quizzes_taken, 'quiz', 'quizzes')} · ${stats.study_time_label}` : 'No quizzes yet'}
         />
       </div>
 
@@ -355,12 +408,17 @@ const Overview = ({ projectId, documents, addDocuments }) => {
             <section className="card">
               <div className="card-header py-3">
                 <h2 className="card-title">Recent quizzes</h2>
-                <Link to={`/projects/${projectId}/quiz`} className="btn btn-ghost btn-sm -mr-2">New quiz</Link>
+                <Link to={`/projects/${projectId}/quiz`} className="btn btn-ghost btn-sm -mr-2">Take a quiz</Link>
               </div>
               <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
                 {stats.recent_attempts.map((a) => (
                   <li key={a._id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
-                    <span className="muted text-xs">{timeAgo(a.submitted_at)}{a.difficulty ? ` · ${a.difficulty}` : ''}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-zinc-800 dark:text-zinc-200">
+                        {topicTitle[a.topic_id] || a.focus || (a.document_id ? documents.find((d) => d._id === a.document_id)?.filename : null) || 'Mixed topics'}
+                      </span>
+                      <span className="muted block text-xs">{timeAgo(a.submitted_at)}{a.difficulty ? ` · ${a.difficulty}` : ''}</span>
+                    </span>
                     <span className={`font-medium tabular-nums ${a.percentage >= 75 ? 'text-emerald-600 dark:text-emerald-400' : a.percentage >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
                       {a.score}/{a.total} · {a.percentage}%
                     </span>
@@ -379,7 +437,7 @@ const OverviewPage = () => {
   const { projectId } = useParams();
   return (
     <ProjectLayout needsDocuments={false}>
-      {({ documents, addDocuments }) => <Overview projectId={projectId} documents={documents} addDocuments={addDocuments} />}
+      {({ documents, addDocuments }) => <Overview key={projectId} projectId={projectId} documents={documents} addDocuments={addDocuments} />}
     </ProjectLayout>
   );
 };

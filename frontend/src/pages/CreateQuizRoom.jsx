@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { errorMessage, projectAPI, roomAPI } from '../services/api';
 import { roomIdentity } from '../services/socket';
@@ -7,6 +7,7 @@ import { useApp } from '../contexts/AppContext';
 import ScopePicker from '../components/projects/ScopePicker';
 import Segmented from '../components/ui/Segmented';
 import LoadingSpinner from '../components/common/LoadingSpinner';
+import { DIFFICULTY_OPTIONS, QUIZ_PREFERENCES } from '../utils/constants';
 
 const Section = ({ title, description, children }) => (
   <div className="grid gap-4 px-5 py-6 md:grid-cols-[220px_1fr] md:gap-8">
@@ -21,20 +22,34 @@ const Section = ({ title, description, children }) => (
 const CreateQuizRoom = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  // Opened from a project (/projects/:id/live) the project is fixed and the project menu stays.
+  const { projectId: routeProject } = useParams();
   const { addNotification } = useApp();
 
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [projectId, setProjectId] = useState(params.get('project') || '');
+  const [projectId, setProjectId] = useState(routeProject || params.get('project') || '');
   const [documents, setDocuments] = useState([]);
   const [documentId, setDocumentId] = useState(params.get('document') || '');
   const [roomName, setRoomName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const nameRef = useRef(null);
+  const projectRef = useRef(null);
   const [numQuestions, setNumQuestions] = useState(10);
   const [timePerQuestion, setTimePerQuestion] = useState(30);
   const [difficulty, setDifficulty] = useState('medium');
   const [maxParticipants, setMaxParticipants] = useState(20);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
+
+  const project = projects.find((p) => p._id === projectId);
+  const suggestedName = project ? `${project.name} quiz` : '';
+
+  // Until the host types a name, it follows the chosen project ("Biology quiz").
+  useEffect(() => {
+    if (!nameTouched) setRoomName(suggestedName);
+  }, [suggestedName, nameTouched]);
 
   useEffect(() => {
     projectAPI
@@ -62,13 +77,18 @@ const CreateQuizRoom = () => {
 
   const create = async (e) => {
     e.preventDefault();
-    if (!roomName.trim()) return setError('Give the quiz a name.');
-    if (!projectId) return setError('Choose the project the questions should come from.');
+    const name = roomName.trim() || suggestedName;
+    const problems = {};
+    if (!projectId) problems.project = 'Choose the project the questions should come from.';
+    if (!name) problems.name = 'Give the quiz a name.';
+    setFieldErrors(problems);
+    if (problems.project) return projectRef.current?.focus();
+    if (problems.name) return nameRef.current?.focus();
     setError(null);
     setCreating(true);
     try {
       const res = await roomAPI.create({
-        room_name: roomName.trim(),
+        room_name: name,
         project_id: projectId,
         ...(documentId ? { document_id: documentId } : {}),
         num_questions: numQuestions,
@@ -90,9 +110,12 @@ const CreateQuizRoom = () => {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Link to="/study-rooms" className="muted mb-4 inline-flex items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-zinc-100">
+      <Link
+        to={routeProject ? `/projects/${routeProject}` : '/study-rooms'}
+        className="muted mb-4 inline-flex items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-zinc-100"
+      >
         <ChevronLeft className="h-4 w-4" />
-        Live quizzes
+        {routeProject ? project?.name || 'Back to project' : 'Live quizzes'}
       </Link>
       <h1 className="text-2xl font-semibold tracking-tight">Host a live quiz</h1>
       <p className="muted mt-1.5 text-sm">Players join with a code. You control the pace, one question at a time.</p>
@@ -106,7 +129,22 @@ const CreateQuizRoom = () => {
         <Section title="Basics" description="What players will see when they join.">
           <div>
             <label htmlFor="room-name" className="label">Quiz name</label>
-            <input id="room-name" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="Friday biology revision" maxLength={60} className="input" />
+            <input
+              id="room-name"
+              ref={nameRef}
+              value={roomName}
+              onChange={(e) => {
+                setNameTouched(true);
+                setRoomName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: null }));
+              }}
+              placeholder={suggestedName || 'Name your quiz'}
+              maxLength={60}
+              aria-invalid={Boolean(fieldErrors.name)}
+              aria-describedby={fieldErrors.name ? 'room-name-error' : undefined}
+              className={`input ${fieldErrors.name ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+            />
+            {fieldErrors.name && <p id="room-name-error" className="field-error">{fieldErrors.name}</p>}
           </div>
           <div>
             <label htmlFor="project" className="label">Project</label>
@@ -120,7 +158,17 @@ const CreateQuizRoom = () => {
                 </Link>
               </p>
             ) : (
-              <select id="project" value={projectId} onChange={(e) => setProjectId(e.target.value)} className="input">
+              <select
+                id="project"
+                ref={projectRef}
+                value={projectId}
+                onChange={(e) => {
+                  setProjectId(e.target.value);
+                  if (fieldErrors.project) setFieldErrors((prev) => ({ ...prev, project: null }));
+                }}
+                aria-invalid={Boolean(fieldErrors.project)}
+                className={`input ${fieldErrors.project ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+              >
                 <option value="">Choose a project</option>
                 {projects.map((p) => (
                   <option key={p._id} value={p._id}>
@@ -129,6 +177,7 @@ const CreateQuizRoom = () => {
                 ))}
               </select>
             )}
+            {fieldErrors.project && <p className="field-error">{fieldErrors.project}</p>}
           </div>
           {documents.length > 1 && (
             <ScopePicker id="room-scope" label="Questions from" documents={documents} value={documentId} onChange={setDocumentId} />
@@ -136,13 +185,13 @@ const CreateQuizRoom = () => {
         </Section>
 
         <Section title="Questions" description="Generated from your documents when you open the lobby.">
-          <div>
-            <div className="mb-1.5 flex justify-between text-sm">
-              <label htmlFor="num-questions" className="font-medium text-zinc-700 dark:text-zinc-300">Number of questions</label>
-              <span className="font-medium tabular-nums">{numQuestions}</span>
-            </div>
-            <input id="num-questions" type="range" min="3" max="25" value={numQuestions} onChange={(e) => setNumQuestions(Number(e.target.value))} className="w-full" />
-          </div>
+          <Segmented
+            id="count-label"
+            label="Questions"
+            value={numQuestions}
+            onChange={setNumQuestions}
+            options={QUIZ_PREFERENCES.QUESTION_COUNTS.map((n) => ({ value: n, label: String(n) }))}
+          />
           <Segmented
             id="time-label"
             label="Time per question"
@@ -150,17 +199,7 @@ const CreateQuizRoom = () => {
             onChange={setTimePerQuestion}
             options={[10, 15, 20, 30, 45, 60].map((t) => ({ value: t, label: `${t}s` }))}
           />
-          <Segmented
-            id="difficulty-label"
-            label="Difficulty"
-            value={difficulty}
-            onChange={setDifficulty}
-            options={[
-              { value: 'easy', label: 'Easy' },
-              { value: 'medium', label: 'Medium' },
-              { value: 'hard', label: 'Hard' },
-            ]}
-          />
+          <Segmented id="difficulty-label" label="Difficulty" value={difficulty} onChange={setDifficulty} options={DIFFICULTY_OPTIONS} />
         </Section>
 
         <Section title="Players">
@@ -174,7 +213,7 @@ const CreateQuizRoom = () => {
         </Section>
 
         <div className="flex justify-end gap-2 bg-zinc-50 px-5 py-4 dark:bg-zinc-900/60">
-          <Link to="/study-rooms" className="btn btn-ghost">Cancel</Link>
+          <Link to={routeProject ? `/projects/${routeProject}` : '/study-rooms'} className="btn btn-ghost">Cancel</Link>
           <button type="submit" disabled={creating || projects.length === 0} className="btn btn-primary">
             {creating ? <LoadingSpinner size="small" /> : null}
             Create quiz

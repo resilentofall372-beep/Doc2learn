@@ -42,7 +42,7 @@ const uniqueSources = (sources) => {
 
 const TopicSources = ({ sources }) => {
   if (!sources?.length) return null;
-  const labels = uniqueSources(sources).map((s) => sourceLabel({ filename: s.filename, page: s.page }));
+  const labels = uniqueSources(sources).map((s) => sourceLabel({ filename: s.filename, page: s.page, section: s.section }));
   return <p className="muted mt-2 truncate text-xs" title={labels.join('; ')}>From {labels.join('; ')}</p>;
 };
 

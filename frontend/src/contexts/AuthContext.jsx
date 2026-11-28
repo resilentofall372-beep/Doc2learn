@@ -20,7 +20,11 @@ const clearSession = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => storage.get(STORAGE_KEYS.USER_DATA));
-  const [loading, setLoading] = useState(true);
+  // With a stored session, render straight away (sidebar and all) and confirm the token in the
+  // background; only a visitor with a token but no stored user waits for the check.
+  const [loading, setLoading] = useState(
+    () => Boolean(storage.get(STORAGE_KEYS.AUTH_TOKEN)) && !storage.get(STORAGE_KEYS.USER_DATA)
+  );
 
   const persist = useCallback((token, userInfo) => {
     storage.set(STORAGE_KEYS.AUTH_TOKEN, token);

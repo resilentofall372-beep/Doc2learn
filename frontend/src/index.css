@@ -4,6 +4,8 @@
 
 @layer base {
   html {
+    /* Keep room for the scrollbar so pages don't shift sideways when it appears. */
+    scrollbar-gutter: stable;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: 'cv11', 'ss01';
@@ -86,9 +88,21 @@
       hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300
       dark:hover:border-zinc-600 dark:hover:bg-zinc-800;
   }
+  /* Selected: filled, so it reads as chosen at a glance (not just a thin border). */
   .choice-active {
-    @apply border-primary-600 bg-primary-50 text-primary-700 ring-1 ring-primary-600 hover:border-primary-600 hover:bg-primary-50
-      dark:border-primary-400 dark:bg-primary-500/10 dark:text-primary-200 dark:ring-primary-400 dark:hover:bg-primary-500/10;
+    @apply border-primary-600 bg-primary-600 text-white shadow-sm hover:border-primary-600 hover:bg-primary-600
+      dark:border-primary-500 dark:bg-primary-500 dark:text-white dark:hover:bg-primary-500;
+  }
+
+  /* A picked quiz answer: light, so the answer text stays readable */
+  .choice-selected {
+    @apply border-primary-600 bg-primary-50 ring-1 ring-primary-600 hover:border-primary-600 hover:bg-primary-50
+      dark:border-primary-400 dark:bg-primary-500/10 dark:ring-primary-400 dark:hover:bg-primary-500/10;
+  }
+
+  /* Placeholder blocks while a page loads */
+  .skeleton {
+    @apply animate-pulse rounded-md bg-zinc-200/80 dark:bg-zinc-800;
   }
 
   /* Text helpers */

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BookOpen, Check, ChevronRight, Copy, History, Layers, Lightbulb, ListChecks, PenLine, RotateCw, Sparkles } from 'lucide-react';
+import { BookOpen, Check, ChevronRight, CircleCheck, CircleDot, CircleX, Copy, History, Layers, Lightbulb, ListChecks, PenLine, RotateCw, Sparkles } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { assistantAPI, errorMessage } from '../../services/api';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Dialog from '../ui/Dialog';
-import RichText, { sourceLabel } from '../ui/RichText';
+import RichText, { SourceChips } from '../ui/RichText';
 import Segmented from '../ui/Segmented';
 import ScopePicker from '../projects/ScopePicker';
 import { useTopics } from '../../hooks/useTopics';
@@ -23,7 +23,6 @@ const TOOLS = [
     icon: Lightbulb,
     options: { text: '' },
     required: true,
-    size: 'xl',
     // With a topic the explanation is saved to it and the topic's Learn step is ticked.
     run: (projectId, docId, o) => assistantAPI.explainConcept(projectId, docId, o.text, o.topicId),
     label: (o) => o.text,
@@ -31,10 +30,11 @@ const TOOLS = [
   {
     id: 'practice',
     name: 'Written practice',
-    description: 'Open questions to answer in your own words, with hints and model answers',
+    description: 'Answer open questions in your own words and get them graded against your documents',
     icon: PenLine,
     options: { text: '', count: 5 },
-    run: (projectId, docId, o) => assistantAPI.generatePractice(projectId, docId, o.text || 'general', o.count),
+    // With an outline topic, graded answers count towards that topic's mastery.
+    run: (projectId, docId, o) => assistantAPI.generatePractice(projectId, docId, o.text || 'general', o.count, o.topicId),
     label: (o) => `${o.count} problems${o.text ? ` · ${o.text}` : ''}`,
   },
 ];
@@ -42,10 +42,109 @@ const TOOLS = [
 const toolById = Object.fromEntries(TOOLS.map((t) => [t.id, t]));
 
 // --------------------------------------------------------------------------- results
-const Sources = ({ sources }) =>
-  sources?.length ? <p className="muted mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">Sources: {sources.map(sourceLabel).join('; ')}</p> : null;
+const Sources = ({ sources }) => <SourceChips sources={sources} className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800" />;
 
-const Result = ({ type, data, projectId }) => {
+const VERDICT = {
+  correct: { label: 'Right', icon: CircleCheck, className: 'badge-success', box: 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/10' },
+  partial: { label: 'Partly right', icon: CircleDot, className: 'badge-warning', box: 'border-amber-200 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/10' },
+  incorrect: { label: 'Not quite', icon: CircleX, className: 'badge-danger', box: 'border-red-200 bg-red-50/60 dark:border-red-500/30 dark:bg-red-500/10' },
+};
+
+/** One written problem: answer it, get it graded against the documents, then see the model answer. */
+const PracticeProblem = ({ problem, index, projectId, documentId, topicId, legend }) => {
+  const [answer, setAnswer] = useState('');
+  const [state, setState] = useState({ grading: false, result: null, error: null });
+  const [revealed, setRevealed] = useState(false);
+  const verdict = state.result ? VERDICT[state.result.verdict] || VERDICT.incorrect : null;
+
+  const check = async () => {
+    if (!answer.trim() || state.grading) return;
+    const attemptId = state.result?.attempt_id;
+    setState({ grading: true, result: null, error: null });
+    try {
+      const res = await assistantAPI.gradePractice(projectId, documentId || null, {
+        question: problem.question,
+        modelAnswer: problem.answer,
+        answer: answer.trim(),
+        topicId,
+        attemptId,
+      });
+      setState({ grading: false, result: res.data, error: null });
+      setRevealed(true);
+    } catch (err) {
+      setState({ grading: false, result: null, error: errorMessage(err, 'Could not grade this answer. Try again.') });
+    }
+  };
+
+  return (
+    <li className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        <span className="muted mr-1.5 font-normal tabular-nums">{index + 1}.</span>
+        {problem.question}
+      </p>
+      <textarea
+        rows={3}
+        value={answer}
+        onChange={(e) => setAnswer(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) check();
+        }}
+        placeholder="Explain it in your own words…"
+        className="input mt-3 resize-y text-sm"
+        aria-label={`Your answer to problem ${index + 1}`}
+        disabled={state.grading}
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={check} disabled={!answer.trim() || state.grading} className="btn btn-primary btn-sm">
+          {state.grading ? <LoadingSpinner size="small" /> : <Check className="h-3.5 w-3.5" />}
+          {state.grading ? 'Checking…' : state.result ? 'Check again' : 'Check my answer'}
+        </button>
+        {problem.hint && !state.result && (
+          <details className="group min-w-0">
+            <summary className="cursor-pointer px-1 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Show hint</summary>
+            <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">{problem.hint}</p>
+          </details>
+        )}
+        {!revealed && (
+          <button type="button" onClick={() => setRevealed(true)} className="btn btn-ghost btn-sm ml-auto">
+            I don&apos;t know, show the answer
+          </button>
+        )}
+      </div>
+      {state.error && <p className="field-error">{state.error}</p>}
+      {state.result && verdict && (
+        <div className={`mt-3 rounded-lg border p-3 ${verdict.box}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`badge ${verdict.className}`}>
+              <verdict.icon className="h-3.5 w-3.5" />
+              {verdict.label}
+            </span>
+            <span className="muted text-xs">
+              {state.result.counted ? 'Counted towards this topic’s mastery' : 'Pick an outline topic to count answers towards your progress'}
+            </span>
+          </div>
+          <RichText text={state.result.feedback} legend={state.result.legend || legend} className="mt-2 text-sm text-zinc-700 dark:text-zinc-300" />
+          {state.result.missing?.length > 0 && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-zinc-700 marker:text-zinc-400 dark:text-zinc-300">
+              {state.result.missing.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+          )}
+          <SourceChips sources={state.result.sources} className="mt-2" />
+        </div>
+      )}
+      {revealed && problem.answer && (
+        <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+          <p className="eyebrow mb-1">Model answer</p>
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">{problem.answer}</p>
+        </div>
+      )}
+    </li>
+  );
+};
+
+const Result = ({ type, data, projectId, documentId }) => {
   const legend = data.legend;
   if (type === 'explain') {
     const routes = data.topic_id && projectId ? topicRoutes(projectId, { id: data.topic_id, title: data.concept }) : null;
@@ -74,25 +173,15 @@ const Result = ({ type, data, projectId }) => {
     return (
       <ol className="space-y-3">
         {data.problems.map((problem, idx) => (
-          <li key={problem.question} className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              <span className="muted mr-1.5 font-normal tabular-nums">{idx + 1}.</span>
-              {problem.question}
-            </p>
-            <textarea rows={2} placeholder="Write your answer here before you check…" className="input mt-3 resize-y text-sm" aria-label={`Your answer to problem ${idx + 1}`} />
-            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-              {problem.hint && (
-                <details className="group min-w-0 flex-1">
-                  <summary className="cursor-pointer text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Show hint</summary>
-                  <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">{problem.hint}</p>
-                </details>
-              )}
-              <details className="group min-w-0 flex-1">
-                <summary className="cursor-pointer text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400">Check model answer</summary>
-                <p className="mt-1.5 text-sm text-zinc-700 dark:text-zinc-300">{problem.answer}</p>
-              </details>
-            </div>
-          </li>
+          <PracticeProblem
+            key={problem.question}
+            problem={problem}
+            index={idx}
+            projectId={projectId}
+            documentId={documentId}
+            topicId={data.topic_id}
+            legend={legend}
+          />
         ))}
       </ol>
     );
@@ -124,7 +213,7 @@ const Chips = ({ items, selected = [], onPick, label }) =>
               aria-pressed={on}
               className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
                 on
-                  ? 'border-primary-600 bg-primary-50 text-primary-700 dark:border-primary-400 dark:bg-primary-500/10 dark:text-primary-200'
+                  ? 'border-primary-600 bg-primary-600 text-white dark:border-primary-500 dark:bg-primary-500'
                   : 'border-zinc-200 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800'
               }`}
             >
@@ -144,11 +233,13 @@ const ToolFields = ({ tool, options, setOptions, topics }) => {
     return [...new Set(all)].slice(0, 14);
   }, [topics]);
 
+  // An example from the learner's own material, not a made-up subject.
+  const example = concepts.find((c) => !topicTitles.includes(c)) || concepts[0];
   if (tool.id === 'explain') {
     return (
       <div>
         <label htmlFor="tool-concept" className="label">Concept</label>
-        <input id="tool-concept" autoFocus value={options.text} onChange={(e) => set({ text: e.target.value })} maxLength={200} placeholder="e.g. photosynthesis" className="input" />
+        <input id="tool-concept" autoFocus value={options.text} onChange={(e) => set({ text: e.target.value })} maxLength={200} placeholder={example ? `e.g. ${example}` : 'A term or idea from your documents'} className="input" />
         <Chips items={concepts} selected={[options.text]} onPick={(text) => set({ text })} label="From your topic outline" />
       </div>
     );
@@ -190,9 +281,10 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
     e?.preventDefault();
     if (!ready || loading) return;
     const clean = { ...options, ...(typeof options.text === 'string' ? { text: options.text.trim() } : {}) };
-    if (tool.id === 'explain') {
-      // Explaining an outline topic saves it to that topic (the link from Overview names the topic).
-      const byTitle = topics.find((t) => t.title.toLowerCase() === clean.text.toLowerCase());
+    if (tool.id === 'explain' || tool.id === 'practice') {
+      // Explaining an outline topic saves it to that topic (the link from Overview names the topic);
+      // written answers on an outline topic count towards its mastery.
+      const byTitle = clean.text ? topics.find((t) => t.title.toLowerCase() === clean.text.toLowerCase()) : null;
       clean.topicId = byTitle?.id || (preset?.topicId && clean.text === preset.text ? preset.topicId : undefined);
     }
     setLoading(true);
@@ -273,7 +365,7 @@ const StudyToolDialog = ({ tool, projectId, documents, topics, initial, preset, 
                   {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
-              <Result type={result.type} data={result.data} projectId={projectId} />
+              <Result type={result.type} data={result.data} projectId={projectId} documentId={result.documentId} />
             </section>
           )}
 
@@ -362,7 +454,7 @@ const QuickActions = ({ projectId, documents }) => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">{tool.name}</span>
-                    <span className="muted block truncate text-xs">{tool.description}</span>
+                    <span className="muted block text-xs leading-snug">{tool.description}</span>
                   </span>
                   <ChevronRight className="h-4 w-4 flex-shrink-0 text-zinc-300 transition-transform group-hover:translate-x-0.5 dark:text-zinc-600" />
                 </button>

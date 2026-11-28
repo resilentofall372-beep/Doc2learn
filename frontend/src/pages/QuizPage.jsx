@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { documentAPI, errorMessage, quizAPI } from '../services/api';
 import { useApp } from '../contexts/AppContext';
-import { QUIZ_PREFERENCES } from '../utils/constants';
+import { DIFFICULTY_OPTIONS, QUIZ_PREFERENCES } from '../utils/constants';
 import ProjectLayout from '../components/projects/ProjectLayout';
 import ScopePicker from '../components/projects/ScopePicker';
 import TopicPicker from '../components/projects/TopicPicker';
@@ -13,19 +13,36 @@ import QuizQuestion from '../components/quiz/QuizQuestion';
 import QuizProgress from '../components/quiz/QuizProgress';
 import QuizResults from '../components/quiz/QuizResults';
 import Segmented from '../components/ui/Segmented';
-import { sourceLabel } from '../components/ui/RichText';
-import { PageLoader } from '../components/common/LoadingSpinner';
-
-const DIFFICULTY_OPTIONS = [
-  { value: 'easy', label: 'Easy', hint: 'Recall' },
-  { value: 'medium', label: 'Medium', hint: 'Understanding' },
-  { value: 'hard', label: 'Hard', hint: 'Analysis' },
-];
+import { SourceChips } from '../components/ui/RichText';
+import LoadingSpinner, { PageLoader } from '../components/common/LoadingSpinner';
+import { itemSource } from '../utils/progress';
 
 const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-const sourceOf = (item) =>
-  item.source_document ? { filename: item.source_document.filename, page: item.source_page } : item.source_page ? { page: item.source_page } : null;
+const sourceOf = itemSource;
+
+/** Outline of a question card while the first question is being written. */
+const QuestionSkeleton = () => (
+  <section className="card mx-auto max-w-2xl" aria-busy="true">
+    <div className="space-y-3 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+      <div className="flex justify-between">
+        <div className="skeleton h-4 w-28" />
+        <div className="skeleton h-4 w-12" />
+      </div>
+      <div className="skeleton h-1.5 w-full" />
+    </div>
+    <div className="space-y-3 px-6 py-6">
+      <div className="skeleton h-5 w-11/12" />
+      <div className="skeleton h-5 w-2/3" />
+      <div className="space-y-2.5 pt-4">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="skeleton h-11 w-full rounded-lg" />
+        ))}
+      </div>
+      <p className="muted pt-2 text-center text-sm">Writing the first question from your documents…</p>
+    </div>
+  </section>
+);
 
 const Quiz = ({ projectId, documents }) => {
   const { addNotification } = useApp();
@@ -44,12 +61,14 @@ const Quiz = ({ projectId, documents }) => {
   );
   const [quizId, setQuizId] = useState(null);
   const [questions, setQuestions] = useState([]);
+  const [pending, setPending] = useState(0); // questions still being written in the background
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState({});
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const timer = useRef(null);
+  const activeQuiz = useRef(null); // questions written in the background only join the quiz they were for
 
   useEffect(() => () => clearInterval(timer.current), []);
 
@@ -63,6 +82,8 @@ const Quiz = ({ projectId, documents }) => {
     timer.current = setInterval(() => setElapsed((s) => s + 1), 1000);
   };
 
+  // The first question is written on its own so the learner can start in a few seconds;
+  // the rest are added to the same quiz in the background.
   const generate = async () => {
     setPhase('generating');
     setError(null);
@@ -71,16 +92,38 @@ const Quiz = ({ projectId, documents }) => {
         projectId,
         documentId: documentId || null,
         topicId: topicId || null,
-        num_questions: numQuestions,
+        num_questions: 1,
         difficulty,
       });
-      setQuizId(res.data.quiz_id);
+      const id = res.data.quiz_id;
+      activeQuiz.current = id;
+      const rest = Math.max(0, numQuestions - res.data.questions.length);
+      setQuizId(id);
       setQuestions(res.data.questions);
+      setPending(rest);
       setAnswers({});
       setCurrent(0);
       setElapsed(0);
       setPhase('quiz');
       startTimer();
+      if (rest) {
+        documentAPI
+          .extendQuiz(id, rest)
+          .then((more) => {
+            if (activeQuiz.current !== id) return;
+            const added = more.data.questions || [];
+            setQuestions((prev) => [...prev, ...added]);
+            if (added.length < rest) {
+              addNotification({ type: 'info', title: 'Shorter quiz', message: `Only ${1 + added.length} questions could be written this time.` });
+            }
+          })
+          .catch(() => {
+            if (activeQuiz.current === id) {
+              addNotification({ type: 'info', title: 'Shorter quiz', message: 'The other questions could not be written. You can still submit this one.' });
+            }
+          })
+          .finally(() => activeQuiz.current === id && setPending(0));
+      }
     } catch (err) {
       setError(errorMessage(err, 'Could not generate a quiz'));
       setPhase('settings');
@@ -118,6 +161,8 @@ const Quiz = ({ projectId, documents }) => {
   };
 
   const restart = () => {
+    activeQuiz.current = null;
+    setPending(0);
     setPhase('settings');
     setQuestions([]);
     setResults(null);
@@ -125,7 +170,7 @@ const Quiz = ({ projectId, documents }) => {
     setQuizId(null);
   };
 
-  if (phase === 'generating') return <PageLoader label="Writing questions from your documents…" />;
+  if (phase === 'generating') return <QuestionSkeleton />;
   if (phase === 'submitting') return <PageLoader label="Grading…" />;
   if (phase === 'results' && results) return <QuizResults results={results} onRestart={restart} projectId={projectId} />;
 
@@ -165,7 +210,9 @@ const Quiz = ({ projectId, documents }) => {
   }
 
   const question = questions[current];
-  const isLast = current === questions.length - 1;
+  const total = questions.length + pending;
+  const waitingForNext = current === questions.length - 1 && pending > 0;
+  const isLast = current === questions.length - 1 && pending === 0;
   const answeredCount = Object.keys(answers).length;
   const source = sourceOf(question);
   return (
@@ -173,14 +220,14 @@ const Quiz = ({ projectId, documents }) => {
       <div className="space-y-3 border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium">
-            Question {current + 1} <span className="muted font-normal">of {questions.length}</span>
+            Question {current + 1} <span className="muted font-normal">of {total}</span>
           </span>
           <span className="muted inline-flex items-center gap-1.5 tabular-nums">
             <Clock className="h-3.5 w-3.5" />
             {formatTime(elapsed)}
           </span>
         </div>
-        <QuizProgress current={answeredCount} total={questions.length} />
+        <QuizProgress current={answeredCount} total={total} />
       </div>
       <div className="px-6 py-6">
         {topicTitles[question.topic_id] && <p className="eyebrow mb-2">{topicTitles[question.topic_id]}</p>}
@@ -189,7 +236,7 @@ const Quiz = ({ projectId, documents }) => {
           selectedAnswer={answers[current]}
           onAnswerSelect={(answer) => setAnswers((prev) => ({ ...prev, [current]: answer }))}
         />
-        {source && <p className="mt-4 text-xs text-zinc-400">Based on {sourceLabel(source)}</p>}
+        {source && <SourceChips sources={[source]} label="Based on" className="mt-4" />}
       </div>
       <div className="flex items-center justify-between border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
         <button type="button" onClick={() => setCurrent((c) => c - 1)} disabled={current === 0} className="btn btn-ghost">
@@ -199,11 +246,20 @@ const Quiz = ({ projectId, documents }) => {
         <button
           type="button"
           onClick={() => (isLast ? submit() : setCurrent((c) => c + 1))}
-          disabled={!answers[current]}
+          disabled={!answers[current] || waitingForNext}
           className="btn btn-primary"
         >
-          {isLast ? 'Submit answers' : 'Next'}
-          {!isLast && <ArrowRight className="h-4 w-4" />}
+          {waitingForNext ? (
+            <>
+              <LoadingSpinner size="small" />
+              Writing the next question…
+            </>
+          ) : (
+            <>
+              {isLast ? 'Submit answers' : 'Next'}
+              {!isLast && <ArrowRight className="h-4 w-4" />}
+            </>
+          )}
         </button>
       </div>
     </section>
